@@ -9,7 +9,6 @@ Code that is commonly shared throughout BleachBit
 """
 
 import os
-import re
 import sys
 from configparser import NoOptionError, RawConfigParser  # used in other files
 
@@ -41,19 +40,11 @@ online_update_notification_enabled = True
 # Platform
 #
 
-# platform
-IS_WINDOWS = os.name == 'nt'
-IS_POSIX = os.name == 'posix'
-IS_LINUX = sys.platform.startswith('linux')
-IS_MAC = sys.platform == 'darwin'
-IS_BSD = sys.platform.startswith(('freebsd', 'openbsd', 'netbsd'))
-IS_FREEBSD = sys.platform.startswith('freebsd')
-IS_NETBSD = sys.platform[:6] == 'netbsd'
-ARCH_BITS = 64 if sys.maxsize > 2**32 else 32
-
-# file system attributes
-FS_CASE_SENSITIVE = not (IS_WINDOWS or IS_MAC)
-FS_SCAN_RE_FLAGS = 0 if FS_CASE_SENSITIVE else re.IGNORECASE
+# Leaf module (no bleachbit imports) to avoid cycles; re-exported so
+# `from bleachbit import IS_WINDOWS` keeps working.
+from bleachbit.Platform import (
+    ARCH_BITS, FS_CASE_SENSITIVE, FS_SCAN_RE_FLAGS, IS_BSD, IS_FREEBSD,
+    IS_LINUX, IS_MAC, IS_NETBSD, IS_POSIX, IS_WINDOWS)
 
 
 #
