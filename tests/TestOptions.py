@@ -259,6 +259,19 @@ check_online_updates=True
         self.assertIn(bleachbit.options_file, log_context.output[0])
         self.assertEqual(o.get('test_key'), 'test_value')
 
+    def test_error_other_oserror(self):
+        """Test graceful degradation for an OSError other than ENOSPC/EACCES"""
+        quota_error = OSError('Disk quota exceeded')
+        quota_error.errno = errno.EDQUOT
+        o = bleachbit.Options.Options()
+        with mock.patch('builtins.open', side_effect=quota_error):
+            with self.assertLogs(level='ERROR') as log_context:
+                o.set('test_key', 'test_value')
+                o.commit()
+        self.assertIn('Error writing configuration', log_context.output[0])
+        self.assertIn(bleachbit.options_file, log_context.output[0])
+        self.assertEqual(o.get('test_key'), 'test_value')
+
     def test_warning(self):
         """Test warning preferences"""
         o = bleachbit.Options.options

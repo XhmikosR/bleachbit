@@ -219,7 +219,11 @@ class Options:
                 logger.error(
                     _("Permission denied when writing configuration to file: %s"), bleachbit.options_file)
             else:
-                raise
+                # This may run on a background flush timer with no caller to
+                # handle a re-raise, so degrade gracefully for any other
+                # errno (e.g., EDQUOT) instead of crashing that thread.
+                logger.exception(
+                    _("Error writing configuration to file: %s"), bleachbit.options_file)
         else:
             self._dirty = False
 
