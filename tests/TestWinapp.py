@@ -91,7 +91,11 @@ class WinappTestCase(common.BleachbitTestCase):
     @common.skipUnlessWindows
     def test_remote(self):
         """Test with downloaded file"""
-        winapps = Winapp(get_winapp2())
+        try:
+            fname = get_winapp2()
+        except AssertionError as e:
+            self.skipTest(f'real network unavailable: {e}')
+        winapps = Winapp(fname)
         for cleaner in winapps.get_cleaners():
             self.run_all(cleaner, False)
 
