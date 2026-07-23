@@ -154,19 +154,21 @@ jobs:
           sudo Xvfb :1 -screen 0 800x600x24 &
           sleep 5
           if [[ "${{ matrix.python-version }}" == "3.9" ]]; then
-            dbus-run-session -- bash -c '/usr/lib/notification-daemon/notification-daemon & sleep 2 && xvfb-run -a bash -c "make tests && make tests-with-sudo"'
+            dbus-run-session -- bash -c '/usr/lib/notification-daemon/notification-daemon & sleep 2 && xvfb-run -a bash -c "make tests"'
+          elif [[ "${{ matrix.python-version }}" == "3.12" ]]; then
+            dbus-run-session -- bash -c '/usr/lib/notification-daemon/notification-daemon & sleep 2 && xvfb-run -a bash -c "PYTHONWARNINGS=error PYTHONPATH=. pytest -n logical -m '"'"'not no_xdist'"'"' && PYTHONWARNINGS=error PYTHONPATH=. pytest -m no_xdist"'
           else
-            dbus-run-session -- bash -c '/usr/lib/notification-daemon/notification-daemon & sleep 2 && xvfb-run -a bash -c "make -C cleaners tests && PYTHONWARNINGS=error PYTHONPATH=. pytest -n logical -m '"'"'not no_xdist'"'"' && PYTHONWARNINGS=error PYTHONPATH=. pytest -m no_xdist && python windows/nsis_translations.py --unittest && make tests-with-sudo"'
+            dbus-run-session -- bash -c '/usr/lib/notification-daemon/notification-daemon & sleep 2 && xvfb-run -a bash -c "make -C cleaners tests && PYTHONWARNINGS=error PYTHONPATH=. pytest -n logical -m '"'"'not no_xdist'"'"' --cov=bleachbit --cov-report= && PYTHONWARNINGS=error PYTHONPATH=. pytest -m no_xdist --cov=bleachbit --cov-append --cov-report= && python windows/nsis_translations.py --unittest && make tests-with-sudo"'
           fi
 
       - name: Generate lcov coverage
-        if: matrix.python-version == '3.9' && github.repository == 'bleachbit/bleachbit'
+        if: matrix.python-version == '3.14' && github.repository == 'bleachbit/bleachbit'
         run: |
           coverage report
           coverage lcov -o coverage.lcov
 
       - name: Upload coverage to Coveralls
-        if: matrix.python-version == '3.9' && github.repository == 'bleachbit/bleachbit'
+        if: matrix.python-version == '3.14' && github.repository == 'bleachbit/bleachbit'
         uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
         with:
           file: coverage.lcov
