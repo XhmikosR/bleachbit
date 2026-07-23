@@ -67,9 +67,12 @@ class CookieTestCase(common.BleachbitTestCase):
     def setUp(self):
         """Set up test fixtures"""
         super().setUp()
-        # Reminder: each test case has its own, temporary bleachbit.ini config,
-        # so no need to save/restore options.
+        # tearDown reloads Options, so this doesn't leak between tests
         options.set('shred', True)
+
+    def _cleanup_keep_list(self, keep_path):
+        """Ensure the shared cookie keep-list file doesn't outlive this test"""
+        self.addCleanup(lambda: os.path.exists(keep_path) and os.remove(keep_path))
 
     def _get_file_hash(self, filepath):
         """Calculate SHA-256 hash of a file"""
@@ -512,6 +515,7 @@ class CookieTestCase(common.BleachbitTestCase):
         # Ensure the file doesn't exist
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         if os.path.exists(keep_path):
             os.remove(keep_path)
         result = load_keep_list()
@@ -522,6 +526,7 @@ class CookieTestCase(common.BleachbitTestCase):
         keep_data = ["example.com", "example.org"]
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         os.makedirs(bleachbit.options_dir, exist_ok=True)
         with open(keep_path, 'w', encoding='utf-8') as f:
             json.dump(keep_data, f)
@@ -533,6 +538,7 @@ class CookieTestCase(common.BleachbitTestCase):
         action = self._make_cookie_action()
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         os.makedirs(bleachbit.options_dir, exist_ok=True)
         self.write_file(keep_path, '{invalid json', mode='w')
         with self.assertRaises(json.JSONDecodeError):
@@ -545,6 +551,7 @@ class CookieTestCase(common.BleachbitTestCase):
         action = self._make_cookie_action()
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         os.makedirs(bleachbit.options_dir, exist_ok=True)
         # Write invalid UTF-8 bytes
         with open(keep_path, 'wb') as f:
@@ -559,6 +566,7 @@ class CookieTestCase(common.BleachbitTestCase):
         action = self._make_cookie_action()
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         os.makedirs(bleachbit.options_dir, exist_ok=True)
         self.write_file(keep_path, json.dumps(["example.com"]), mode='w')
         real_open = open
@@ -579,6 +587,7 @@ class CookieTestCase(common.BleachbitTestCase):
         action = self._make_cookie_action()
         keep_path = os.path.join(
             bleachbit.options_dir, COOKIE_KEEP_LIST_FILENAME)
+        self._cleanup_keep_list(keep_path)
         os.makedirs(bleachbit.options_dir, exist_ok=True)
         self.write_file(keep_path, json.dumps(["example.com"]), mode='w')
         # Remove read permission
