@@ -352,7 +352,7 @@ qemu-system-x86_64 \
     -smp "$VM_CPUS" \
     -drive file="$SNAPSHOT_IMG",if=virtio,format=qcow2 \
     -drive file="$SEED_ISO",if=virtio,format=raw,readonly=on,media=cdrom \
-    -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 \
+    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${SSH_PORT}-:22 \
     -device virtio-net-pci,netdev=net0 \
     -display none \
     -serial file:"$VM_LOG" \
