@@ -306,9 +306,9 @@ jobs:
           path: |
             BleachBit-*-setup-English.exe
 
-  windows-test:
-    name: windows-test
-    timeout-minutes: 30
+  windows-test-admin:
+    name: windows-test (admin)
+    timeout-minutes: 25
     runs-on: windows-latest
 
     env:
@@ -351,6 +351,81 @@ jobs:
         shell: pwsh
         run: .\windows\python-gtk3-install.ps1
 
+      - name: Generate Revision.py
+        uses: ./.github/actions/generate-revision
+
+      - name: Generate translations
+        shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
+        run: |
+          set PATH=%MSYS_BIN%;%PATH%
+          make PYTHON="%PYTHON_EXE%" -C po local
+
+      - name: Install test dependencies
+        shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
+        run: '"%PYTHON_HOME%\Scripts\pip3.exe" install --disable-pip-version-check -r requirements-test.txt'
+
+      - name: Run admin tests
+        shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
+        env:
+          DESTRUCTIVE_TESTS: T
+          PYTHONWARNINGS: error
+          COVERAGE_FILE: .coverage.admin
+        run: |
+          set PATH=%MSYS_BIN%;C:\ProgramData\chocolatey\bin;C:\Windows\system32;C:\Windows;C:\Windows\system32\wbem;C:\Windows\SysWOW64\WindowsPowerShell\v1.0\
+          "%PYTHON_EXE%" -m pytest -n logical --dist=loadgroup -m "not no_xdist" --cov=bleachbit --cov-report= tests
+          set RC1=%ERRORLEVEL%
+          "%PYTHON_EXE%" -m pytest -m no_xdist --cov=bleachbit --cov-append --cov-report= tests
+          set RC2=%ERRORLEVEL%
+          if not %RC1%==0 exit /b %RC1%
+          if not %RC2%==0 exit /b %RC2%
+
+      - name: Upload coverage artifact
+        if: github.repository == 'bleachbit/bleachbit'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-admin
+          path: .coverage.admin
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 1
+
+  windows-test-other:
+    name: windows-test (nonadmin + low-integrity)
+    timeout-minutes: 25
+    runs-on: windows-latest
+
+    env:
+      PYTHON_HOME: ${{ github.workspace }}\vcpkg_installed\x86-windows\tools\python3
+      PYTHON_EXE: ${{ github.workspace }}\vcpkg_installed\x86-windows\tools\python3\python.exe
+      MSYS_BIN: C:\msys64\usr\bin
+      PIP_CACHE_DIR: ${{ github.workspace }}\.pip-cache
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Cache the installed environment
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            gtk*-x86-windows.zip
+            gtk-themes.zip
+            pygobject-*-win32.whl
+            vcpkg_installed
+          key: win-test-env-${{ hashFiles('.github/workflows/build_and_test.yaml', 'windows/python-gtk3-deps.lst', 'windows/python-gtk3-install.ps1', 'requirements.txt', 'windows/requirements.txt', 'requirements-test.txt') }}
+
+      - name: Cache pip packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}\.pip-cache
+          key: pip-win-test-${{ hashFiles('requirements.txt', 'windows/requirements.txt', 'requirements-test.txt') }}
+          restore-keys: pip-win-
+
+      - name: Install Python and GTK
+        shell: pwsh
+        run: .\windows\python-gtk3-install.ps1
+
       - name: Install PsExec
         shell: pwsh
         run: choco install psexec --version=2.43 -y
@@ -368,33 +443,13 @@ jobs:
         shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
         run: '"%PYTHON_HOME%\Scripts\pip3.exe" install --disable-pip-version-check -r requirements-test.txt'
 
-      # Suites run as separate steps (not a matrix); ids let the coverage
-      # steps below check each suite's outcome before reporting.
-      - name: Run admin tests
-        id: admin
-        shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
-        env:
-          DESTRUCTIVE_TESTS: T
-          PYTHONWARNINGS: error
-          COVERAGE_FILE: .coverage.admin
-        run: |
-          set PATH=%MSYS_BIN%;C:\ProgramData\chocolatey\bin;C:\Windows\system32;C:\Windows;C:\Windows\system32\wbem;C:\Windows\SysWOW64\WindowsPowerShell\v1.0\
-          "%PYTHON_EXE%" -m pytest -n logical --dist=loadgroup -m "not no_xdist" --cov=bleachbit --cov-report= tests
-          set RC1=%ERRORLEVEL%
-          "%PYTHON_EXE%" -m pytest -m no_xdist --cov=bleachbit --cov-append --cov-report= tests
-          set RC2=%ERRORLEVEL%
-          if not %RC1%==0 exit /b %RC1%
-          if not %RC2%==0 exit /b %RC2%
-
       - name: Run non-admin tests
-        id: nonadmin
         shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
         run: |
           set PATH=%MSYS_BIN%;C:\ProgramData\chocolatey\bin;C:\Windows\system32;C:\Windows;C:\Windows\system32\wbem;C:\Windows\SysWOW64\WindowsPowerShell\v1.0\
           call windows\run-psexec-nonadmin-tests.bat
 
       - name: Run low-integrity tests
-        id: lowintegrity
         shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
         run: |
           set PATH=%MSYS_BIN%;C:\ProgramData\chocolatey\bin;C:\Windows\system32;C:\Windows;C:\Windows\system32\wbem;C:\Windows\SysWOW64\WindowsPowerShell\v1.0\
@@ -405,8 +460,50 @@ jobs:
         shell: cmd # zizmor: ignore[misfeature] this step's script is written in cmd/batch syntax
         run: copy /Y "%USERPROFILE%\AppData\LocalLow\.coverage.psexec" .coverage.psexec
 
+      - name: Upload coverage artifact
+        if: github.repository == 'bleachbit/bleachbit'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-other
+          path: .coverage.*
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 1
+
+  windows-coverage:
+    # Default needs-success semantics: skipped if either test job failed, so
+    # coverage is only combined/reported when everything passed
+    needs: [windows-test-admin, windows-test-other]
+    if: github.repository == 'bleachbit/bleachbit'
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Generate Revision.py
+        uses: ./.github/actions/generate-revision
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-test.txt
+
+      - name: Install coverage
+        shell: pwsh
+        run: pip install -r requirements-test.txt
+
       - name: Combine coverage
-        if: &all_suites_passed steps.admin.outcome == 'success' && steps.nonadmin.outcome == 'success' && steps.lowintegrity.outcome == 'success' && github.repository == 'bleachbit/bleachbit'
         shell: pwsh
         run: |
           Get-ChildItem .coverage* -Force -ErrorAction SilentlyContinue | Format-Table Name, Length
@@ -416,16 +513,14 @@ jobs:
             Write-Host "::error::No coverage files found"
             exit 1
           }
-          & $env:PYTHON_EXE -m coverage combine --data-file=.coverage @files
-          & $env:PYTHON_EXE -m coverage report --data-file=.coverage
+          python -m coverage combine --data-file=.coverage @files
+          python -m coverage report --data-file=.coverage
 
       - name: Generate lcov coverage
-        if: *all_suites_passed
         shell: pwsh
-        run: "& $env:PYTHON_EXE -m coverage lcov -o coverage.lcov --data-file=.coverage"
+        run: python -m coverage lcov -o coverage.lcov --data-file=.coverage
 
       - name: Upload coverage to Coveralls
-        if: *all_suites_passed
         uses: coverallsapp/github-action@648a8eb78e6d50909eff900e4ec85cab4524a45b # v2.3.6
         with:
           file: coverage.lcov
@@ -494,7 +589,7 @@ jobs:
             }
 
   coveralls-finish:
-    needs: [linux, windows-test]
+    needs: [linux, windows-coverage]
     if: github.repository == 'bleachbit/bleachbit'
     # This took 11s on ubuntu-slim (2026-07-27).
     runs-on: ubuntu-slim
