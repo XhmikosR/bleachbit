@@ -439,13 +439,14 @@ jobs:
   windows-deploy:
     needs: [windows-build]
     # Eligible for deployment:
-    # - Any branch push in bleachbit/bleachbit
+    # - master pushes in bleachbit/bleachbit
     # - Tags
-    # - workflow_dispatch
+    # - workflow_dispatch, so a feature branch can still be deployed on demand
     # - No pull requests, whether from a fork or the same repository
-    # - No Dependabot branches: GitHub Actions withholds repository secrets
-    #   from workflows triggered by Dependabot, so the S3 upload would fail.
-    if: github.repository == 'bleachbit/bleachbit' && github.event_name != 'pull_request' && !startsWith(github.ref_name, 'dependabot/')
+    # Feature branches are excluded, which also covers Dependabot: GitHub
+    # Actions withholds repository secrets from workflows it triggers, so the
+    # S3 upload would fail.
+    if: github.repository == 'bleachbit/bleachbit' && github.event_name != 'pull_request' && (github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
     runs-on: windows-latest
     timeout-minutes: 5
     env:
