@@ -9,9 +9,10 @@ name: Run tests on macOS
 
 on:
   push:
+    # macOS minutes bill at 10x, so feature branches are covered by the
+    # pull_request event instead of on every push.
     branches:
-      - '**'
-      - '!dependabot/**' # avoid duplicate runs; the pull_request event handles dependabot PRs
+      - master
     paths:
       - '**'
       - '!bleachbit.spec'
