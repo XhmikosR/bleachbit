@@ -37,7 +37,6 @@ def _estimate_in_memory_size(conn, table_name, delete_query, params):
     mem_conn = None
     try:
         # In FreeBSD, sqlite3 is a separate package
-        # pylint: disable=import-outside-toplevel
         import sqlite3
         mem_conn = sqlite3.connect(':memory:')
         conn.backup(mem_conn)
@@ -75,7 +74,7 @@ def _get_db_disk_size(path):
 
 def _checkpoint_wal(conn, path):
     """Checkpoint and truncate WAL to keep disk footprint accurate."""
-    import sqlite3  # pylint: disable=import-outside-toplevel
+    import sqlite3
     prev_isolation = conn.isolation_level
     try:
         conn.isolation_level = None
@@ -123,7 +122,7 @@ def detect_browser(path):
 
 def list_cookies(path):
     """List cookies in the database"""
-    import sqlite3  # pylint: disable=import-outside-toplevel
+    import sqlite3
     (table_name, host_column) = detect_browser(path)
     uri = _sqlite_uri(path)
     with contextlib.closing(sqlite3.connect(uri, uri=True)) as conn:
@@ -172,7 +171,7 @@ def delete_cookies(path, keep_list, really_delete=False):
         raise ValueError("keep_list must not be empty")
     assert isinstance(keep_list, set)
 
-    import sqlite3  # pylint: disable=import-outside-toplevel
+    import sqlite3
     # Find the first matching table configuration
     (table_name, host_column) = detect_browser(path)
 
@@ -330,7 +329,7 @@ def list_unique_cookies():
         list[str]: Sorted, de-duplicated list of cookie host strings.
     """
 
-    import sqlite3  # pylint: disable=import-outside-toplevel
+    import sqlite3
     cookie_files = set()
     # Import backends here to avoid a circular import.
     from bleachbit.Cleaner import backends as cleaner_backends
