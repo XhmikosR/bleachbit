@@ -385,9 +385,9 @@ class WorkerTestCase(common.BleachbitTestCase):
 
         class MyDeepScan:
             def __init__(self, searches):
-                for (path, searches) in searches.items():
+                for (path, path_searches) in searches.items():
                     parent.assertEqual(path, os.path.expanduser('~'))
-                    for s in searches:
+                    for s in path_searches:
                         parent.assertIn(
                             s.regex, ['^Thumbs\\.db$', '^Thumbs\\.db:encryptable$'])
 
