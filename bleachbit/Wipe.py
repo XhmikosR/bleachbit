@@ -413,8 +413,7 @@ def wipe_path(pathname, idle=False):
                 # Linux gives errno 122 Disk quota exceeded (EDQUOT)
                 if e.errno in (errno.EMFILE, errno.ENOSPC, errno.EDQUOT):
                     break
-                else:
-                    raise
+                raise
 
             # Remember to delete
             files.append(f)
@@ -447,8 +446,7 @@ def wipe_path(pathname, idle=False):
                             break
                     elif e.errno == errno.EFBIG:
                         break
-                    else:
-                        raise
+                    raise
                 if idle and (time.time() - last_idle) > 2:
                     # Keep the GUI responding, and allow the user to abort.
                     # Also display the ETA.
