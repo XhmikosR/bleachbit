@@ -1668,9 +1668,7 @@ class SplashThread(Thread):
         except Exception:
             logger.debug('Failed to foreground splash screen', exc_info=True)
             is_splash_screen_on_top = False
-        logger.debug(
-            'Is splash screen on top: {}'.format(is_splash_screen_on_top)
-        )
+        logger.debug('Is splash screen on top: %s', is_splash_screen_on_top)
 
         return hWindow
 
@@ -1693,9 +1691,8 @@ class SplashThread(Thread):
         except Exception as e:
             exc_message = str(e)
             logger.debug(
-                'Failed attempt to show splash screen with keybd_event: {}'.format(
-                    exc_message)
-            )
+                'Failed attempt to show splash screen with keybd_event: %s',
+                exc_message)
 
         if win32gui.GetForegroundWindow() == hWindow:
             return True
@@ -1718,9 +1715,8 @@ class SplashThread(Thread):
             except Exception as e:
                 exc_message = str(e)
                 logger.debug(
-                    'Failed attempt to show splash screen with AttachThreadInput: {}'.format(
-                        exc_message)
-                )
+                    'Failed attempt to show splash screen with '
+                    'AttachThreadInput: %s', exc_message)
 
         else:
             win32gui.BringWindowToTop(hWindow)
@@ -1743,9 +1739,8 @@ class SplashThread(Thread):
         except Exception as e:
             exc_message = str(e)
             logger.debug(
-                'Failed attempt to show splash screen with SystemParametersInfo: {}'.format(
-                    exc_message)
-            )
+                'Failed attempt to show splash screen with '
+                'SystemParametersInfo: %s', exc_message)
 
         if win32gui.GetForegroundWindow() == hWindow:
             return True
