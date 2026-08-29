@@ -17,6 +17,7 @@ from tests import common
 
 HAVE_GTK = is_gtk_available()
 if HAVE_GTK:
+    # pylint: disable-next=ungrouped-imports
     from bleachbit import GuiBasic
     from bleachbit.GuiBasic import open_url
 

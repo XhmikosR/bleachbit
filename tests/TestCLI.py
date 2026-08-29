@@ -35,6 +35,7 @@ from bleachbit.CLI import (
 from bleachbit.General import get_executable, run_external
 from bleachbit.GtkShim import gtk_may_be_available
 from bleachbit import FileUtilities, Options, IS_WINDOWS, IS_POSIX
+# pylint: disable-next=ungrouped-imports
 from tests import common
 
 RUN_EXTERNAL_TIMEOUT = 30

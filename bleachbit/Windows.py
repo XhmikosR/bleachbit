@@ -76,6 +76,7 @@ if IS_WINDOWS:
     setattr(win32gui, 'GetClassInfo', getattr(
         win32gui, 'GetClassInfo', _get_class_info_fallback))
 
+    # pylint: disable-next=ungrouped-imports
     from ctypes import windll
     from win32com.shell import shell, shellcon
 

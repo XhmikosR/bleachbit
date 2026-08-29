@@ -54,16 +54,22 @@ from bleachbit import logger
 if bleachbit.IS_WINDOWS:
     import winreg
     import win32gui
+    # pylint: disable-next=ungrouped-imports
     from bleachbit import Windows
+# pylint: disable-next=wrong-import-position
 import bleachbit.Options
+# pylint: disable-next=wrong-import-position
 from bleachbit.Bootstrap import bootstrap
+# pylint: disable-next=wrong-import-position
 from bleachbit.GtkShim import ignore_pygobject_asyncio_warnings
+# pylint: disable-next=wrong-import-position
 from bleachbit.FileUtilities import (
     children_in_directory,
     extended_path,
     is_hard_link,
     is_normal_directory,
 )
+# pylint: disable-next=wrong-import-position
 from bleachbit.General import gc_collect, sudo_mode
 
 # /etc/locale.alias may list the qaa-qtz range, which is reserved for

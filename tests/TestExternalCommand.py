@@ -25,10 +25,12 @@ import bleachbit
 from bleachbit import IS_WINDOWS
 from bleachbit.GtkShim import is_gtk_available
 from bleachbit.Options import options
+# pylint: disable-next=ungrouped-imports
 from tests import common
 
 HAVE_GTK = is_gtk_available()
 if HAVE_GTK:
+    # pylint: disable-next=ungrouped-imports
     from bleachbit.GuiApplication import Bleachbit
 
 

@@ -72,6 +72,7 @@ from bleachbit.FileUtilities import (
 from bleachbit.General import gc_collect, run_external
 from bleachbit.Options import init_configuration, options
 from bleachbit import logger, FS_CASE_SENSITIVE, IS_POSIX, IS_WINDOWS
+# pylint: disable-next=ungrouped-imports
 from tests import common
 
 
@@ -82,7 +83,9 @@ if IS_WINDOWS:
     import win32con
     import win32file
 
+    # pylint: disable-next=ungrouped-imports
     from bleachbit import Windows
+    # pylint: disable-next=ungrouped-imports
     from tests.TestWindows import WindowsLinksMixIn
 else:
     WindowsLinksMixIn = object

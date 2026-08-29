@@ -27,10 +27,12 @@ from bleachbit.GtkShim import Gdk, Gio, GLib, GObject, Gtk, is_gtk_available
 from bleachbit.Language import get_supported_language_code_name_dict
 from bleachbit.Language import get_text as _
 from bleachbit.Options import options
+# pylint: disable-next=ungrouped-imports
 from tests import common
 
 HAVE_GTK = is_gtk_available()
 if HAVE_GTK:
+    # pylint: disable-next=ungrouped-imports
     from bleachbit.GuiUtil import (clear_clipboard, get_font_size_from_name,
                                    get_window_info)
     from bleachbit.GuiTreeModels import TreeDisplayModel

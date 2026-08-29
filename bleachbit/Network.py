@@ -57,9 +57,13 @@ else:
         pass
 
 # local imports
+# pylint: disable-next=wrong-import-position
 from bleachbit import bleachbit_exe_path, APP_VERSION, ARCH_BITS, General, IS_LINUX, IS_NETBSD, IS_WINDOWS
+# pylint: disable-next=wrong-import-position
 from bleachbit.FileUtilities import delete, open_for_overwrite
+# pylint: disable-next=wrong-import-position
 from bleachbit.General import unset_sslkeylogfile
+# pylint: disable-next=wrong-import-position
 from bleachbit.Language import get_active_language_code, get_text as _
 
 logger = logging.getLogger(__name__)

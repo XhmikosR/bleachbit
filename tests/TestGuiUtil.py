@@ -19,6 +19,7 @@ from tests.common import pytest
 from bleachbit import General, logger
 from bleachbit.GtkShim import is_gtk_available
 
+# pylint: disable-next=ungrouped-imports
 from tests import common
 
 HAVE_GTK = is_gtk_available()

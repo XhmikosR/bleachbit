@@ -25,7 +25,9 @@ if bleachbit.IS_WINDOWS:
     from win32com.shell import shell
 
 # local
+# pylint: disable-next=wrong-import-position
 from tests import common
+# pylint: disable-next=wrong-import-position
 from bleachbit.FileUtilities import children_in_directory
 
 if bleachbit.IS_WINDOWS:
@@ -47,6 +49,7 @@ if bleachbit.IS_WINDOWS:
         GENERIC_READ,
         GENERIC_WRITE
     )
+    # pylint: disable-next=ungrouped-imports
     from tests.TestWindows import WindowsLinksMixIn
 else:
     WindowsLinksMixIn = object

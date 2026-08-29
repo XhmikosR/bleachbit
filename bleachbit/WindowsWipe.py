@@ -109,6 +109,7 @@ from winioctlcon import (FSCTL_GET_RETRIEVAL_POINTERS,
                          FSCTL_SET_COMPRESSION,
                          FSCTL_SET_SPARSE,
                          FSCTL_SET_ZERO_DATA)
+# pylint: disable-next=ungrouped-imports
 from win32file import (GENERIC_READ, GENERIC_WRITE, FILE_BEGIN,
                        FILE_SHARE_DELETE,
                        FILE_SHARE_READ, FILE_SHARE_WRITE,

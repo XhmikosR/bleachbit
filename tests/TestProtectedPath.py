@@ -36,6 +36,7 @@ from bleachbit.PathUtils import (
     path_has_relative_suffix,
 )
 from bleachbit.Cleaner import backends
+# pylint: disable-next=ungrouped-imports
 from tests.TestCleaner import register_all_cleaners
 
 

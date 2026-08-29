@@ -142,6 +142,7 @@ if bleachbit.IS_WINDOWS:
     import winreg
     from win32com.shell import shell
 
+    # pylint: disable-next=ungrouped-imports
     from bleachbit import Windows
 
 
