@@ -65,6 +65,8 @@ if IS_WINDOWS:
     # Ensure GetClassInfo exists for compatibility and testing
     # Some win32gui builds don't have GetClassInfo, so we create a stub
     # In the future, consider GetClassInfoEx instead.
+    # The signature mirrors win32gui.GetClassInfo.
+    # pylint: disable-next=unused-argument
     def _get_class_info_fallback(hInstance, className):
         """Fallback GetClassInfo - returns a default atom value"""
         return (1234,)  # Return tuple with default atom

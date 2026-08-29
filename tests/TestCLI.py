@@ -261,6 +261,7 @@ class CLITestCase(common.BleachbitTestCase):
                 deleted_paths = []
                 crash = [False]
 
+                # pylint: disable-next=unused-argument
                 def dummy_delete(path, shred=False, crash=crash,
                                  deleted_paths=deleted_paths):
                     try:
