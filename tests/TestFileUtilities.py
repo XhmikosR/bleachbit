@@ -191,8 +191,10 @@ def _open_blocking_handle(path, share_mode):
     Returns:
         File handle that blocks other processes from accessing the file
     """
+    # pylint: disable-next=possibly-used-before-assignment
     return win32file.CreateFile(
         path,
+        # pylint: disable-next=possibly-used-before-assignment
         win32con.GENERIC_READ | win32con.GENERIC_WRITE,
         share_mode,
         None,
@@ -884,7 +886,8 @@ State=AAAA/wA...
         for shred in (False, True):
             fn = os.path.join(self.tempdir, 'hidden')
             common.touch_file(fn)
-            # pylint: disable=possibly-used-before-assignment, c-extension-no-member
+            # pylint: disable=c-extension-no-member
+            # pylint: disable-next=possibly-used-before-assignment
             win32api.SetFileAttributes(fn, win32con.FILE_ATTRIBUTE_HIDDEN)
             self.assertExists(fn)
             self.assertFalse(is_hard_link(fn))
@@ -1576,7 +1579,7 @@ State=AAAA/wA...
                 # Expand the directory names, which are in the short format,
                 # to test the case where the full path (including the directory)
                 # is longer than 255 characters.
-                # pylint: disable=possibly-used-before-assignment, c-extension-no-member
+                # pylint: disable=c-extension-no-member
                 lname = win32api.GetLongPathNameW(extended_path(filename))
                 self.assertEqual(getsize(lname), 10 * 12345)
                 # this function returns a byte string instead of Unicode

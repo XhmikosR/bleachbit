@@ -8,10 +8,6 @@
 Test cases for module Winapp
 """
 
-# Names imported behind a platform or GTK guard are only used where
-# that guard holds, which pylint cannot correlate.
-# pylint: disable=possibly-used-before-assignment
-
 import os
 import re
 import shutil
@@ -41,6 +37,7 @@ def _create_registry_keys(*key_paths):
         return
     for key_path in key_paths:
         with suppress(OSError):
+            # pylint: disable-next=possibly-used-before-assignment
             hkey = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
             hkey.Close()
 

@@ -31,6 +31,9 @@ class GuiBasicTestCase(common.BleachbitTestCase):
                 'javascript:alert(1)',
                 'myapp://action',
                 'HTTP:evil')  # missing slashes: not a valid http(s) URL
+        # The name is reported on a continuation line, which cannot be
+        # preceded by a comment, so this covers the statement instead.
+        # pylint: disable=possibly-used-before-assignment
         with mock.patch('webbrowser.open') as mock_open, \
                 mock.patch.object(GuiBasic.Gtk, 'show_uri_on_window') as mock_show_uri, \
                 mock.patch.object(GuiBasic.Gtk, 'show_uri') as mock_show_uri_old, \
@@ -38,6 +41,7 @@ class GuiBasicTestCase(common.BleachbitTestCase):
             for url in urls:
                 with self.subTest(url=url):
                     mock_logger.reset_mock()
+                    # pylint: disable-next=possibly-used-before-assignment
                     open_url(url, prompt=False)
                     mock_open.assert_not_called()
                     mock_show_uri.assert_not_called()

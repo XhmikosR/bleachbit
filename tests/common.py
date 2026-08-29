@@ -673,6 +673,7 @@ def validate_result(self, result, really_delete=False, allow_vanishing=False):
 
 def get_winregistry_value(key, subkey):
     try:
+        # pylint: disable-next=possibly-used-before-assignment
         with winreg.OpenKey(key, subkey) as hkey:
             return winreg.QueryValue(hkey, None)
     except FileNotFoundError:
@@ -689,6 +690,7 @@ def get_opened_windows_titles():
     opened_windows_titles = []
 
     def enumerate_opened_windows_titles(hwnd, _ctx):
+        # pylint: disable-next=possibly-used-before-assignment
         text = win32gui.GetWindowText(hwnd)
         if win32gui.IsWindowVisible(hwnd) and text:
             opened_windows_titles.append(text)

@@ -152,6 +152,7 @@ class WipeTestCase(common.BleachbitTestCase):
         not follow a symlink planted at the path in the meantime.
         """
         filename = self.write_file('wipe_contents_locked_fallback', b'abc')
+        # pylint: disable-next=possibly-used-before-assignment
         locked_error = pywintypes.error(32, 'CreateFile', 'locked')
         with mock.patch('bleachbit.Wipe.IsUserAnAdmin', return_value=True), \
                 mock.patch('bleachbit.WindowsWipe.file_wipe',

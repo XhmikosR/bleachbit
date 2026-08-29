@@ -477,6 +477,7 @@ class ExternalCommandTestCase(common.BleachbitTestCase):
                     file_to_shred,  # The pathname must be last
                 ]
                 with mock.patch('bleachbit.Windows.sys.argv', custom_argv):
+                    # pylint: disable-next=possibly-used-before-assignment
                     Bleachbit(auto_exit=True, shred_paths=[
                               file_to_shred], uac=True)
 

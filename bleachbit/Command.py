@@ -105,6 +105,7 @@ class Delete:
                 if not e.winerror == 32:
                     raise
 
+                # pylint: disable-next=possibly-used-before-assignment
                 bleachbit.Windows.delete_locked_file(self.path)
 
                 if self.shred:
