@@ -263,6 +263,8 @@ def wipe_contents(path):
                         # Errno 13 Permission Denied
                         pass
             # translate exception to mark file to deletion in Command.py
+            # WindowsError is a real builtin, reachable only under IS_WINDOWS.
+            # pylint: disable-next=undefined-variable
             raise WindowsError(e.winerror, e.strerror) from e
         except UnsupportedFileSystemError:
             warnings.warn(

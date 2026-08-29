@@ -488,6 +488,8 @@ def delete_registry_value(key, value_name, really_delete):
         raise OSError(
             errno.EACCES,
             "Access denied in delete_registry_value()", key) from e
+    # WindowsError is a real builtin; this file only runs on Windows.
+    # pylint: disable-next=undefined-variable
     except WindowsError as e:
         if e.winerror == errno.ENOENT:
             # ENOENT = 'file not found' means value does not exist
@@ -519,6 +521,8 @@ def delete_registry_key(parent_key, really_delete, excludekeys=None):
     hkey = None
     try:
         hkey = winreg.OpenKey(hive, parent_sub_key)
+    # WindowsError is a real builtin; this file only runs on Windows.
+    # pylint: disable-next=undefined-variable
     except WindowsError as e:
         if e.winerror == 2:
             # 2 = 'file not found' happens when key does not exist
@@ -710,6 +714,8 @@ def detect_registry_key(parent_key):
     hkey = None
     try:
         hkey = winreg.OpenKey(hive, parent_sub_key)
+    # WindowsError is a real builtin; this file only runs on Windows.
+    # pylint: disable-next=undefined-variable
     except WindowsError as e:
         if e.winerror == 2:
             # 2 = 'file not found' happens when key does not exist

@@ -89,6 +89,9 @@ if IS_WINDOWS:
     from tests.TestWindows import WindowsLinksMixIn
 else:
     WindowsLinksMixIn = object
+    # WindowsError is a builtin only on Windows
+    # pylint: disable-next=redefined-builtin, ungrouped-imports
+    from bleachbit.General import WindowsError
 
 
 def ini_helper(self, execute):
@@ -953,7 +956,7 @@ State=AAAA/wA...
                     self.assertTrue(delete_file(filename, shred))
                 else:
                     # Delete expected to fail.
-                    # pylint: disable=undefined-variable
+                    # pylint: disable=undefined-variable, possibly-used-before-assignment
                     with self.assertRaises(WindowsError):
                         delete_file(filename, shred)
                 win32file.CloseHandle(handle)

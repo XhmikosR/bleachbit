@@ -144,6 +144,10 @@ if bleachbit.IS_WINDOWS:
 
     # pylint: disable-next=ungrouped-imports
     from bleachbit import Windows
+else:
+    # WindowsError is a builtin only on Windows
+    # pylint: disable-next=redefined-builtin
+    from bleachbit.General import WindowsError
 
 
 def put_objects_into_recycle_bin():
@@ -557,6 +561,7 @@ class WindowsTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
             self.assertExists(pathname)
             logger.debug('delete_locked_file(%s) ', pathname)
             if not shell.IsUserAnAdmin():
+                # pylint: disable-next=possibly-used-before-assignment
                 with self.assertRaises(WindowsError):
                     delete_locked_file(pathname)
             else:
