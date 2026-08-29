@@ -8,6 +8,10 @@
 Test cases for module Winapp
 """
 
+# Names imported behind a platform or GTK guard are only used where
+# that guard holds, which pylint cannot correlate.
+# pylint: disable=possibly-used-before-assignment
+
 import os
 import re
 import shutil
@@ -134,7 +138,8 @@ class WinappTestCase(common.BleachbitTestCase):
         with self.assertRaises(AssertionError):
             self.run_all(cleaner, False, allow_volatile=True)
 
-        cmd.execute.side_effect = FileNotFoundError(2, 'vanished', non_volatile_path)
+        cmd.execute.side_effect = FileNotFoundError(
+            2, 'vanished', non_volatile_path)
         with self.assertRaises(FileNotFoundError):
             self.run_all(cleaner, False, allow_volatile=True)
 
