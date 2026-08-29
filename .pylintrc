@@ -9,6 +9,7 @@ module-naming-style=any
 # cannot see either. Without this the log is dominated by import-error,
 # no-name-in-module and no-member for code that is fine.
 ignored-modules=gi,
+                winreg,
                 gi.repository,
                 bleachbit.GtkShim,
                 certifi,
