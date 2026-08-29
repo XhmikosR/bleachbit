@@ -1231,7 +1231,6 @@ class WindowsTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
 
             def _write_file(longname, contents):
                 self.write_file(longname, contents)
-                import win32api
                 shortname = extended_path_undo(
                     win32api.GetShortPathName(extended_path(longname)))
                 self.assertExists(shortname)

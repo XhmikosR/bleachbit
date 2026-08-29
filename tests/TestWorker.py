@@ -376,12 +376,12 @@ class WorkerTestCase(common.BleachbitTestCase):
         """Test for deep scan"""
 
         # load cleaners from XML
-        import bleachbit.CleanerML
-        list(bleachbit.CleanerML.load_cleaners())
+        from bleachbit import CleanerML
+        list(CleanerML.load_cleaners())
 
         # DeepScan itself is tested elsewhere, so replace it here
-        import bleachbit.DeepScan
-        SaveDeepScan = bleachbit.DeepScan.DeepScan
+        from bleachbit import DeepScan
+        SaveDeepScan = DeepScan.DeepScan
         self.scanned = 0
         parent = self
 
@@ -397,7 +397,7 @@ class WorkerTestCase(common.BleachbitTestCase):
                 parent.scanned += 1
                 yield True
 
-        bleachbit.DeepScan.DeepScan = MyDeepScan
+        DeepScan.DeepScan = MyDeepScan
 
         # test
         operations = {'deepscan': ['thumbs_db']}
@@ -408,7 +408,7 @@ class WorkerTestCase(common.BleachbitTestCase):
         self.assertEqual(1, self.scanned)
 
         # clean up
-        bleachbit.DeepScan.DeepScan = SaveDeepScan
+        DeepScan.DeepScan = SaveDeepScan
 
     def test_multiple_options(self):
         """Test one cleaner with two options"""
