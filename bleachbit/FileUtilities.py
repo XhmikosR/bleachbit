@@ -52,6 +52,7 @@ if IS_WINDOWS:
 
 else:
     # pylint: disable=redefined-builtin
+    # pylint: disable-next=redefined-builtin
     from bleachbit.General import WindowsError
     # pylint: disable=invalid-name
     pywinerror = WindowsError
