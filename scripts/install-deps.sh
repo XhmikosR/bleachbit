@@ -327,8 +327,8 @@ install_opensuse() {
             # fall back to pip --user for the lint tooling used by `make pretty`/`make lint`.
             if ! command -v pylint >/dev/null 2>&1; then
                 echo "[opensuse] installing lint tools via pip --user"
-                pip install --user --break-system-packages pylint pyflakes autopep8 || \
-                    pip install --user pylint pyflakes autopep8
+                pip install --user --break-system-packages -r "$REPO_ROOT/requirements-lint.txt" || \
+                    pip install --user -r "$REPO_ROOT/requirements-lint.txt"
             fi
         fi
     fi
@@ -455,7 +455,7 @@ setup_venv() {
     pip install -r "$req_file"
     if [[ "$MODE" == "dev" ]]; then
         echo "[venv] installing dev/test/lint Python deps"
-        pip install pylint pyflakes autopep8 pytest pytest-xdist pytest-rerunfailures
+        pip install -r "$REPO_ROOT/requirements-test.txt" -r "$REPO_ROOT/requirements-lint.txt"
     fi
 }
 
