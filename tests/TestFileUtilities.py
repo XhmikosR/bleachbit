@@ -16,6 +16,7 @@ import errno
 import itertools
 import json
 import locale
+import mmap
 import os
 import sqlite3
 import stat
@@ -2117,13 +2118,28 @@ State=AAAA/wA...
         fake_file = unittest.mock.Mock(path='/tmp/opened')
         proc = unittest.mock.Mock()
         proc.open_files.return_value = [fake_file]
+        proc.memory_maps.return_value = []
         denied = unittest.mock.Mock()
         denied.open_files.side_effect = OSError('denied')
         empty = unittest.mock.Mock(path='')
         proc_empty = unittest.mock.Mock()
         proc_empty.open_files.return_value = [empty]
+        proc_empty.memory_maps.return_value = []
         with unittest.mock.patch('psutil.process_iter', return_value=[proc, denied, proc_empty]):
             self.assertEqual(list(open_files_psutil()), ['/tmp/opened'])
+
+    def test_open_files_psutil_mapped(self):
+        """open_files_psutil() yields a file that is mapped but not open"""
+        proc = unittest.mock.Mock()
+        proc.open_files.return_value = []
+        proc.memory_maps.return_value = [
+            unittest.mock.Mock(path='/tmp/mapped'),
+            unittest.mock.Mock(path='[anon]')]
+        no_maps = unittest.mock.Mock()
+        no_maps.open_files.return_value = []
+        no_maps.memory_maps.side_effect = psutil.AccessDenied()
+        with unittest.mock.patch('psutil.process_iter', return_value=[proc, no_maps]):
+            self.assertEqual(list(open_files_psutil()), ['/tmp/mapped'])
 
     def test_open_files_freebsd_without_psutil(self):
         """open_files_freebsd() falls back to lsof when psutil is missing"""
@@ -2158,6 +2174,22 @@ State=AAAA/wA...
         os.unlink(filename)
         openfiles.scan()
         self.assertFalse(openfiles.is_open(filename))
+
+    @common.skipUnlessLinux
+    def test_open_files_mapped(self):
+        """OpenFiles counts a file that is mapped but no longer open"""
+        if sys.version_info < (3, 13):
+            self.skipTest('mmap needs trackfd=False to not keep a descriptor')
+        filename = self.write_file(
+            'bleachbit-test-open-files-mapped', b'x' * 4096)
+        with open(filename, 'rb') as f:
+            mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ,
+                               trackfd=False)
+        try:
+            self.assertTrue(OpenFiles().is_open(filename))
+        finally:
+            mapped.close()
+        self.assertFalse(OpenFiles().is_open(filename))
 
     def test_same_partition(self):
         """Unit test for same_partition()"""
