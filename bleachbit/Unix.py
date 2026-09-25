@@ -786,6 +786,11 @@ def yum_clean():
     return old_size - new_size
 
 
+# Fail instead of blocking when another process holds the lock. DNF4 honors
+# it; DNF5 accepts it but does not implement it yet.
+DNF_EXIT_ON_LOCK = '--setopt=exit_on_lock=True'
+
+
 def dnf_clean():
     """Run 'dnf clean all' and return size in bytes recovered"""
     if os.path.exists('/var/run/dnf.pid'):
@@ -805,7 +810,8 @@ def dnf_clean():
     # DNF4 does not report freed space in its output, so infer effect
     # by measuring the delta in directory size.
     old_size = FileUtilities.getsizedir('/var/cache/dnf')
-    args = [General.resolve_exe('dnf'), '--enablerepo=*', 'clean', 'all']
+    args = [General.resolve_exe('dnf'), '--enablerepo=*',
+            DNF_EXIT_ON_LOCK, 'clean', 'all']
     invalid = ['You need to be root', 'Cannot remove rpmdb file']
     (rc, stdout, stderr) = General.run_external(args)
     allout = stdout + stderr
@@ -892,7 +898,7 @@ def dnf_autoremove():
         raise RuntimeError(msg)
     if not FileUtilities.exe_exists(General.resolve_exe('dnf')):
         raise RuntimeError(_('Executable not found: %s') % 'dnf')
-    cmd = [General.resolve_exe('dnf'), '-y', 'autoremove']
+    cmd = [General.resolve_exe('dnf'), '-y', DNF_EXIT_ON_LOCK, 'autoremove']
     (rc, stdout, stderr) = General.run_external(cmd)
     freed_bytes = 0
     allout = stdout + stderr
