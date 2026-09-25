@@ -34,6 +34,7 @@ from tests.common import pytest
 
 # local import
 from bleachbit.FileUtilities import (
+    _mount_points_below,
     _remove_windows_readonly,
     _truncate_locked_file,
     bytes_to_human,
@@ -630,6 +631,84 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
         self.assertTrue(stat.S_ISREG(found[real_file].st_mode))
         self.assertEqual(found[real_file].st_size, 3)
         self.assertTrue(stat.S_ISLNK(found[dir_link].st_mode))
+
+    @common.skipIfWindows
+    def test_mount_points_below(self):
+        """_mount_points_below() reads mounts below dirname from mountinfo"""
+        top = self.mkdir('mount-points-below')
+        real = os.path.realpath(top)
+        mountinfo = ('22 1 8:1 / / rw - ext4 /dev/sda1 rw\n'
+                     f'30 22 0:40 / {real} rw - tmpfs tmpfs rw\n'
+                     f'31 30 8:1 /srv {real}/bind rw - ext4 /dev/sda1 rw\n'
+                     f'32 30 0:41 / {real}/a\\040b rw - tmpfs tmpfs rw\n'
+                     f'33 22 0:42 / {real}-sibling rw - tmpfs tmpfs rw\n')
+        with unittest.mock.patch('bleachbit.FileUtilities.IS_LINUX', True):
+            with unittest.mock.patch(
+                    'bleachbit.FileUtilities.open', create=True,
+                    new=unittest.mock.mock_open(read_data=mountinfo.encode())):
+                self.assertEqual(_mount_points_below(top),
+                                 {os.path.join(top, 'bind'),
+                                  os.path.join(top, 'a b')})
+            with unittest.mock.patch('bleachbit.FileUtilities.open',
+                                     create=True, side_effect=OSError):
+                self.assertEqual(_mount_points_below(top), set())
+        with unittest.mock.patch('bleachbit.FileUtilities.IS_LINUX', False):
+            self.assertEqual(_mount_points_below(top), set())
+
+    @common.skipIfWindows
+    def test_children_same_device_mount_table(self):
+        """same_device also skips a bind mount, which keeps st_dev"""
+        top = self.mkdir('children-mount-table')
+        top_file = self.write_file(os.path.join(top, 'file'))
+        bind = self.mkdir(os.path.join(top, 'bind'))
+        bind_file = self.write_file(os.path.join(bind, 'file'))
+        # A file can be bind-mounted onto another file
+        file_bind = self.write_file(os.path.join(top, 'file-bind'))
+
+        with unittest.mock.patch('bleachbit.FileUtilities._mount_points_below',
+                                 return_value={bind, file_bind}):
+            self.assertEqual(list(dict(children_below(top, same_device=True))),
+                             [top_file])
+            self.assertEqual(
+                list(children_in_directory(top, True, same_device=True)),
+                [top_file])
+            self.assertCountEqual(children_in_directory(top, True),
+                                  [top_file, bind_file, bind, file_bind])
+
+    @common.skipIfWindows
+    def test_children_in_directory_same_device(self):
+        """children_in_directory(same_device=True) skips other filesystems"""
+        top = self.mkdir('children-in-directory-device')
+        top_file = self.write_file(os.path.join(top, 'file'))
+        sub = self.mkdir(os.path.join(top, 'mounted'))
+        sub_file = self.write_file(os.path.join(sub, 'file'))
+
+        self.assertCountEqual(
+            children_in_directory(top, True, same_device=True),
+            [top_file, sub, sub_file])
+        other_dev = unittest.mock.Mock(st_dev=os.stat(top).st_dev + 1)
+        with unittest.mock.patch('os.stat', return_value=other_dev):
+            self.assertEqual(
+                list(children_in_directory(top, True, same_device=True)),
+                [top_file])
+
+    @common.skipIfWindows
+    def test_children_below_same_device(self):
+        """children_below(same_device=True) stays off other filesystems"""
+        top = self.mkdir('children-below-device')
+        top_file = self.write_file(os.path.join(top, 'file'))
+        sub = self.mkdir(os.path.join(top, 'mounted'))
+        sub_file = self.write_file(os.path.join(sub, 'file'))
+
+        self.assertCountEqual(dict(children_below(top, same_device=True)),
+                              [top_file, sub_file])
+        # Mounting needs root, so top reports another device than its subdirs
+        other_dev = unittest.mock.Mock(st_dev=os.stat(top).st_dev + 1)
+        with unittest.mock.patch('os.fstat', return_value=other_dev):
+            self.assertEqual(list(dict(children_below(top, same_device=True))),
+                             [top_file])
+            self.assertCountEqual(dict(children_below(top)),
+                                  [top_file, sub_file])
 
     @common.skipUnlessWindows
     def test_children_in_directory_windows_links(self):
