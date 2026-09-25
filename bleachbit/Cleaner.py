@@ -376,7 +376,9 @@ class System(Cleaner):
             if IS_MAC:
                 dirnames.insert(0, os.path.expanduser("~/Library/Caches/"))
             for dirname in dirnames:
-                for filename in children_in_directory(dirname, True):
+                # Filesystems mounted below it may hold more than cache
+                for filename in children_in_directory(dirname, True,
+                                                      same_device=True):
                     if not self.whitelisted(filename):
                         yield Command.Delete(filename)
 
@@ -518,9 +520,9 @@ class System(Cleaner):
         if IS_POSIX and 'tmp' == option_id:
             dirnames = ['/tmp', '/var/tmp']
             for dirname in dirnames:
-                # Other users can change what is below these, so walk and
-                # delete without following links.
-                for path, st in FileUtilities.children_below(dirname):
+                # Others can swap in links, and mounts below are not tmp files
+                for path, st in FileUtilities.children_below(
+                        dirname, same_device=True):
                     # is_open() resolves the path and rescans /proc, so leave
                     # it until the cheaper tests have had a chance to reject.
                     ok = stat.S_ISREG(st.st_mode) and \

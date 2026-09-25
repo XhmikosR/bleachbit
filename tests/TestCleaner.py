@@ -560,6 +560,22 @@ class CleanerTestCase(common.BleachbitTestCase):
         from bleachbit.FileUtilities import delete
         delete(obexd_fn, ignore_missing=True)
 
+    @common.skipIfWindows
+    def test_system_cache_mount_point(self):
+        """System cache neither walks nor deletes a mount point below it"""
+        home = self.mkdir('cache-mount-home')
+        cache = self.mkdir(os.path.join(home, '.cache'))
+        cache_file = self.write_file(os.path.join(cache, 'file'))
+        mounted = self.mkdir(os.path.join(cache, 'mounted'))
+        self.write_file(os.path.join(mounted, 'file'))
+
+        with mock.patch('os.path.expanduser',
+                        lambda path: path.replace('~', home, 1)), \
+                mock.patch('bleachbit.FileUtilities._mount_points_below',
+                           return_value={mounted}):
+            paths = [cmd.path for cmd in System().get_commands('cache')]
+        self.assertEqual(paths, [cache_file])
+
     def test_custom(self):
         """Test system.custom"""
         from bleachbit.Options import options

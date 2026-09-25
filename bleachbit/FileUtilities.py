@@ -390,7 +390,33 @@ def _is_junction_entry(entry):
     return bleachbit.Windows.is_junction(entry.path)
 
 
-def _scan_children(top, list_directories, pending_dirs):
+def _mount_points_below(dirname):
+    """Return mount points below dirname, as paths starting with dirname"""
+    # For bind mounts, which keep st_dev; off Linux st_dev is enough
+    if not IS_LINUX:
+        return set()
+    try:
+        with open('/proc/self/mountinfo', 'rb') as f:
+            lines = f.read().splitlines()
+    except OSError as e:
+        logger.debug('cannot read the mount table: %s', e)
+        return set()
+    prefix = os.path.join(os.path.realpath(dirname), '')
+    mounts = set()
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 5:
+            continue
+        # The kernel escapes space, tab, newline and backslash as \ooo
+        mountpoint = os.fsdecode(re.sub(
+            rb'\\([0-3][0-7]{2})', lambda m: bytes([int(m.group(1), 8)]),
+            fields[4]))
+        if mountpoint.startswith(prefix):
+            mounts.add(os.path.join(dirname, mountpoint[len(prefix):]))
+    return mounts
+
+
+def _scan_children(top, list_directories, pending_dirs, same_device=False):
     """Yield files under `top`, descending into real subdirectories.
 
     Symlinks and, on Windows, junctions are not descended into. When
@@ -403,6 +429,13 @@ def _scan_children(top, list_directories, pending_dirs):
     cannot exhaust the interpreter's recursion limit.
     """
     stack = [top]
+    top_dev, mounts = None, ()
+    if same_device:
+        try:
+            top_dev = os.stat(top).st_dev
+        except OSError:
+            return
+        mounts = _mount_points_below(top)
     while stack:
         try:
             scandir_it = os.scandir(stack.pop())
@@ -418,6 +451,9 @@ def _scan_children(top, list_directories, pending_dirs):
                         # e.g. permission denied; os.walk also treats this as a file
                         is_dir = False
                     if not is_dir:
+                        # A file can be bind-mounted onto another file
+                        if same_device and entry.path in mounts:
+                            continue
                         # regular file, symlink to a file, or broken link
                         yield entry.path
                         continue
@@ -428,6 +464,13 @@ def _scan_children(top, list_directories, pending_dirs):
                             IS_WINDOWS and _is_junction_entry(entry))
                     except OSError:
                         is_link = False
+                    if same_device and not is_link:
+                        try:
+                            st = entry.stat(follow_symlinks=False)
+                        except OSError:
+                            continue
+                        if st.st_dev != top_dev or entry.path in mounts:
+                            continue
                     if list_directories:
                         pending_dirs.append(entry.path)
                     if not is_link:
@@ -441,20 +484,23 @@ def _scan_children(top, list_directories, pending_dirs):
         stack.extend(reversed(subdirs))
 
 
-def children_in_directory(top, list_directories=False):
+def children_in_directory(top, list_directories=False, same_device=False):
     """Iterate files and, optionally, subdirectories in directory
 
     Directories are returned after children to avoid trying to delete
     a non-empty directory. Symlinks and Windows junctions are never
-    traversed.
+    traversed. With same_device (POSIX), mount points below top are
+    neither traversed nor returned.
     """
     if isinstance(top, tuple):
         for top_ in top:
-            yield from children_in_directory(top_, list_directories)
+            yield from children_in_directory(top_, list_directories,
+                                             same_device)
         return
 
     pending_dirs = [] if list_directories else None
-    yield from _scan_children(top, list_directories, pending_dirs)
+    yield from _scan_children(top, list_directories, pending_dirs,
+                              same_device)
 
     if list_directories:
         pending_dirs.sort(key=len)
@@ -496,7 +542,7 @@ def _open_dir_below(top, dirname):
     return fd
 
 
-def children_below(top):
+def children_below(top, same_device=False):
     """Yield (path, lstat result) for each non-directory under top (POSIX)
 
     Unlike children_in_directory(), each subdirectory is opened relative
@@ -505,6 +551,9 @@ def children_below(top):
     it was listed is skipped instead of walked into. Only top may be a
     link. Pass the same top to delete() so the removal cannot follow one
     either.
+
+    With same_device, mount points below top, bind mounts of its own
+    filesystem included, are not walked into.
 
     A descriptor stays open for each directory from top down to the one
     being listed.
@@ -520,6 +569,8 @@ def children_below(top):
     # opened relative to it, are done. top itself is listed through '.'.
     stack = [(top_fd, None, None), (top_fd, os.curdir, top)]
     try:
+        top_dev = os.fstat(top_fd).st_dev
+        mounts = _mount_points_below(top) if same_device else ()
         while stack:
             parent_fd, name, dirpath = stack.pop()
             if name is None:
@@ -545,8 +596,10 @@ def children_below(top):
                         except OSError:
                             continue
                         if stat.S_ISDIR(st.st_mode):
-                            subdirs.append((dir_fd, entry.name, path))
-                        else:
+                            if not same_device or (st.st_dev == top_dev and
+                                                   path not in mounts):
+                                subdirs.append((dir_fd, entry.name, path))
+                        elif not (same_device and path in mounts):
                             yield path, st
             except OSError:
                 # The directory may disappear or become unreadable mid-iteration
