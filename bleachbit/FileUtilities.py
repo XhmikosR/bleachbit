@@ -62,6 +62,9 @@ else:
 # TODO: drop this fallback once the minimum Python version is 3.12+
 _DIRENTRY_HAS_IS_JUNCTION = hasattr(os.DirEntry, 'is_junction')
 
+# IsReparseTagNameSurrogate(): set for symlinks and junctions
+_IO_REPARSE_TAG_NAME_SURROGATE = 0x20000000
+
 
 def _remove_windows_readonly(path):
     """Clear Windows read-only attribute so deletion/wiping succeeds
@@ -689,13 +692,15 @@ def _file_type(path):
     if not os.path.lexists(path):
         return None
     try:
-        attrs = os.lstat(path).st_file_attributes
+        tag = os.lstat(path).st_reparse_tag
     except OSError:
-        attrs = 0
+        tag = 0
     # A junction/symlink's contents belong to the target, not
     # this path; isdir() would follow it and judge the target's
     # emptiness instead of removing the reparse point itself.
-    if attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+    # Reparse points that are not name surrogates, like cloud
+    # placeholders, are the file or directory itself.
+    if tag & _IO_REPARSE_TAG_NAME_SURROGATE:
         return stat.S_IFLNK
     if os.path.isdir(path):
         return stat.S_IFDIR

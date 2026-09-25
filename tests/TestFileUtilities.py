@@ -820,6 +820,47 @@ State=AAAA/wA...
                     mock_delete_file.assert_called_once()
                     mock_delete_path.assert_not_called()
 
+    def test_delete_windows_non_link_reparse_point(self):
+        """delete() on Windows treats only symlinks and junctions as links
+
+        Other reparse points, like OneDrive placeholders, keep the reparse
+        attribute but must be removed and shredded as ordinary files and
+        directories.
+        """
+        cloud_tag = 0x9000601A
+        junction_tag = 0xA0000003
+        symlink_tag = 0xA000000C
+        # (reparse tag, isdir, expected _delete_path func or None for delete_file)
+        cases = ((0, True, os.rmdir),
+                 (cloud_tag, True, os.rmdir),
+                 (0, False, None),
+                 (cloud_tag, False, None),
+                 (junction_tag, True, os.remove),
+                 (symlink_tag, False, os.remove))
+        for tag, isdir, expected in cases:
+            with self.subTest(tag=hex(tag), isdir=isdir):
+                st = unittest.mock.Mock(
+                    st_reparse_tag=tag,
+                    st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+                mock_delete_file = unittest.mock.Mock()
+                mock_delete_path = unittest.mock.Mock()
+                with unittest.mock.patch.multiple(
+                        'bleachbit.FileUtilities', IS_POSIX=False,
+                        IS_WINDOWS=True, delete_file=mock_delete_file,
+                        _delete_path=mock_delete_path), \
+                        unittest.mock.patch('os.lstat', return_value=st), \
+                        unittest.mock.patch('os.path.lexists', return_value=True), \
+                        unittest.mock.patch('os.path.isdir', return_value=isdir), \
+                        unittest.mock.patch('os.path.isfile', return_value=not isdir):
+                    self.assertTrue(delete('C:\\placeholder', shred=not isdir))
+                if expected is None:
+                    mock_delete_file.assert_called_once()
+                    self.assertTrue(mock_delete_file.call_args.args[1])
+                    mock_delete_path.assert_not_called()
+                else:
+                    mock_delete_file.assert_not_called()
+                    self.assertIs(mock_delete_path.call_args.args[1], expected)
+
     def delete_helper(self, delete_func, shred):
         """Called by test_delete() with shred = False and = True"""
 
