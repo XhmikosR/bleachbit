@@ -947,39 +947,54 @@ def _delete(path, name, do_shred, ignore_missing, dir_fd=None):
                 logger.info(not_empty_msg, path)
                 return False
             delpath = wipe_name(name, dir_fd)
+        removed = False
         try:
-            _delete_path(delpath, os.rmdir, dir_fd=dir_fd)
-        except OSError as e:
-            # [Errno 39] Directory not empty
-            # https://bugs.launchpad.net/bleachbit/+bug/1012930
-            if errno.ENOTEMPTY == e.errno:
-                logger.info(not_empty_msg, path)
-                return False
-            if errno.EBUSY == e.errno:
-                if IS_POSIX and os.path.ismount(path):
-                    # TRANSLATORS: Log message where %s is the pathname.
-                    logger.info(_("Skipping mount point: %s"), path)
-                else:
-                    # TRANSLATORS: Log message where %s is the pathname.
-                    logger.info(_("Device or resource is busy: %s"), path)
-                return False
-            if IS_WINDOWS and errno.EACCES == e.errno:
-                # On Windows, read-only directories cause Access Denied
-                if _remove_windows_readonly(delpath):
-                    _delete_path(delpath, os.rmdir)
+            try:
+                _delete_path(delpath, os.rmdir, dir_fd=dir_fd)
+            except OSError as e:
+                # [Errno 39] Directory not empty
+                # https://bugs.launchpad.net/bleachbit/+bug/1012930
+                if errno.ENOTEMPTY == e.errno:
+                    logger.info(not_empty_msg, path)
+                    return False
+                if errno.EBUSY == e.errno:
+                    if IS_POSIX and os.path.ismount(path):
+                        # TRANSLATORS: Log message where %s is the pathname.
+                        logger.info(_("Skipping mount point: %s"), path)
+                    else:
+                        # TRANSLATORS: Log message where %s is the pathname.
+                        logger.info(_("Device or resource is busy: %s"), path)
+                    return False
+                if IS_WINDOWS and errno.EACCES == e.errno:
+                    # On Windows, read-only directories cause Access Denied
+                    if _remove_windows_readonly(delpath):
+                        _delete_path(delpath, os.rmdir)
+                    else:
+                        raise
                 else:
                     raise
-            else:
+            except WindowsError as e:
+                # WindowsError: [Error 145] The directory is not empty:
+                # 'C:\\Documents and Settings\\username\\Local Settings\\Temp\\NAILogs'
+                # Error 145 may happen if the files are scheduled for deletion
+                # during reboot.
+                if 145 == e.winerror:
+                    logger.info(not_empty_msg, path)
+                    return False
                 raise
-        except WindowsError as e:
-            # WindowsError: [Error 145] The directory is not empty:
-            # 'C:\\Documents and Settings\\username\\Local Settings\\Temp\\NAILogs'
-            # Error 145 may happen if the files are scheduled for deletion
-            # during reboot.
-            if 145 == e.winerror:
-                logger.info(not_empty_msg, path)
-                return False
-            raise
+            removed = True
+        finally:
+            if not removed and delpath != name:
+                # Undo wipe_name() rather than leave the directory
+                # behind under a random name
+                try:
+                    os.rename(delpath, name,
+                              src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+                except OSError:
+                    # TRANSLATORS: Log message where %s is the pathname.
+                    logger.info(_("Directory was left renamed to: %s"),
+                                os.path.join(os.path.dirname(path),
+                                             os.path.basename(delpath)))
         return True
     if stat.S_ISREG(mode):
         delete_file(name, do_shred, dir_fd=dir_fd)

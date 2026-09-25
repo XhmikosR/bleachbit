@@ -1284,6 +1284,19 @@ State=AAAA/wA...
         os.remove(fn)
         self.assertTrue(is_dir_empty(dirname))
 
+    def test_delete_shred_dir_filled_after_check(self):
+        """A shredded directory that gains an entry keeps its name
+
+        is_dir_empty() is mocked to stand in for the entry being created
+        after the check, between the rename and the rmdir.
+        """
+        dirname = self.mkdir('filled_dir')
+        fn = self.write_file(os.path.join(dirname, 'a_file'), b'content')
+        with unittest.mock.patch('bleachbit.FileUtilities.is_dir_empty',
+                                 return_value=True):
+            self.assertFalse(delete(dirname, shred=True))
+        self.assertExists(fn)
+
     def test_delete_read_only_file(self):
         """Unit test for delete() with read-only file"""
         for option_shred, parameter_shred, delete_func in itertools.product(
