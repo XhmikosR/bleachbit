@@ -25,16 +25,19 @@ Store and retrieve user preferences
 # standard library imports
 import atexit
 import configparser
+import contextlib
 import errno
 import hashlib
 import logging
 import os
 import re
+import stat
+import tempfile
 import threading
 
 # local application imports
 import bleachbit
-from bleachbit import General, IS_WINDOWS
+from bleachbit import General, IS_POSIX, IS_WINDOWS
 from bleachbit.FileUtilities import open_for_overwrite
 from bleachbit.Language import get_text as _
 
@@ -154,6 +157,56 @@ def _open_config_write(path):
         path, encoding='utf-8-sig', errors='surrogateescape')
 
 
+def _replace_config_file(config, path, exists):
+    """Write config to a temporary file, then move it over path"""
+    fd, temp_path = tempfile.mkstemp(
+        prefix=os.path.basename(path) + '.', suffix='.tmp',
+        dir=os.path.dirname(path))
+    try:
+        os.close(fd)
+        with _open_config_write(temp_path) as f:
+            config.write(f)
+            f.flush()
+            os.fsync(f.fileno())
+        if exists and IS_POSIX:
+            # keep the old file's mode and, as root, its owner
+            old_stat = os.stat(path)
+            os.chmod(temp_path, stat.S_IMODE(old_stat.st_mode))
+            if os.geteuid() == 0:
+                os.chown(temp_path, old_stat.st_uid, old_stat.st_gid)
+        elif not exists and General.sudo_mode():
+            General.chownself(temp_path)
+        os.replace(temp_path, path)
+    except Exception:
+        with contextlib.suppress(OSError):
+            os.unlink(temp_path)
+        raise
+
+
+def _write_config_file(config, path):
+    """Write config to path
+
+    Going through a temporary file means a failed write leaves the old
+    file whole instead of empty or cut off.
+    """
+    if os.path.islink(path):
+        raise OSError(errno.EACCES, 'refusing to replace a link', path)
+    exists = os.path.exists(path)
+    # Replacing does not need write access to the file itself, so check
+    # it to leave a read-only config alone.
+    if exists and not os.access(path, os.W_OK):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), path)
+    try:
+        _replace_config_file(config, path, exists)
+    except PermissionError:
+        if not exists:
+            raise
+        # A read-only directory, or on Windows another process holding the
+        # file open, can block the move but not a write in place.
+        with _open_config_write(path) as f:
+            config.write(f)
+
+
 def init_configuration(*, log=True):
     """Initialize an empty configuration, if necessary"""
     if not os.path.exists(bleachbit.options_dir):
@@ -251,11 +304,7 @@ class Options:
         try:
             if not os.path.exists(bleachbit.options_dir):
                 General.makedirs(bleachbit.options_dir)
-            mkfile = not os.path.exists(bleachbit.options_file)
-            with _open_config_write(bleachbit.options_file) as _file:
-                self.config.write(_file)
-            if mkfile and General.sudo_mode():
-                General.chownself(bleachbit.options_file)
+            _write_config_file(self.config, bleachbit.options_file)
         except (OSError, IOError, PermissionError) as e:
             if e.errno == errno.ENOSPC:
                 logger.error(
