@@ -813,8 +813,8 @@ State=AAAA/wA...
         With shred disabled, the original file is never deleted, so a
         (simulated) symlink at its path must block the write and leave
         the original content in place. With shred enabled, the original
-        is deleted first as usual, and the guard must then block the
-        symlinked path from being recreated.
+        is deleted first as usual, and a symlink planted after that must
+        still block the path from being recreated.
         """
         content = '[Section]\nkey=value\n'
 
@@ -832,7 +832,7 @@ State=AAAA/wA...
         filename = self.write_file('clean_ini_target_shred', text=content)
         with unittest.mock.patch(
                 'bleachbit.FileUtilities.os.path.islink',
-                side_effect=lambda p: p == filename):
+                side_effect=lambda p: p == filename and not os.path.lexists(p)):
             with self.assertRaises(OSError):
                 clean_ini(filename, 'Section', None)
         self.assertNotExists(filename)
@@ -859,10 +859,34 @@ State=AAAA/wA...
         filename = self.write_file('clean_json_target_shred', text=content)
         with unittest.mock.patch(
                 'bleachbit.FileUtilities.os.path.islink',
-                side_effect=lambda p: p == filename):
+                side_effect=lambda p: p == filename and not os.path.lexists(p)):
             with self.assertRaises(OSError):
                 clean_json(filename, 'deleteme')
         self.assertNotExists(filename)
+
+    @common.skipIfWindows
+    def test_clean_ini_json_symlink_with_shred(self):
+        """A symlinked config is refused with shred as it is without
+
+        delete() removes only the link, so shredding first would let the
+        rewrite replace the link with a new file and leave the data in
+        its target.
+        """
+        cases = ((clean_ini, 'ini', '[Section]\nkey=value\n', ('Section', None)),
+                 (clean_json, 'json', '{"deleteme": 1, "keep": 2}', ('deleteme',)))
+        for shred in (False, True):
+            options.set('shred', shred)
+            for func, ext, content, args in cases:
+                with self.subTest(func=func.__name__, shred=shred):
+                    target = self.write_file(
+                        f'symlink-target-{shred}.{ext}', text=content)
+                    link = os.path.join(self.tempdir, f'symlink-{shred}.{ext}')
+                    os.symlink(target, link)
+                    with self.assertRaises(OSError):
+                        func(link, *args)
+                    self.assertTrue(os.path.islink(link))
+                    with open(target, encoding='utf-8') as f:
+                        self.assertEqual(f.read(), content)
 
     @pytest.mark.no_xdist
     def test_delete(self):

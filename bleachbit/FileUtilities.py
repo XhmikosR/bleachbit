@@ -653,6 +653,17 @@ def open_for_overwrite(path, mode='w', **kwargs):
         raise
 
 
+def _shred_before_rewrite(path):
+    """Shred a config file that clean_ini() or clean_json() rewrites
+
+    delete() would remove only a link and leave the data in its target,
+    so refuse a link, as open_for_overwrite() does without shred.
+    """
+    if os.path.islink(path):
+        raise OSError(errno.EACCES, 'refusing to open a link', path)
+    delete(path, True)
+
+
 def clean_ini(path, section, parameter):
     """Delete sections and parameters (aka option) in the file
 
@@ -700,7 +711,7 @@ def clean_ini(path, section, parameter):
     # write file
     from bleachbit.Options import options
     if options.get('shred'):
-        delete(path, True)
+        _shred_before_rewrite(path)
     with open_for_overwrite(path, encoding=write_encoding, newline='') as fp:
         config.write(fp)
 
@@ -737,7 +748,7 @@ def clean_json(path, target):
     if changed:
         from bleachbit.Options import options
         if options.get('shred'):
-            delete(path, True)
+            _shred_before_rewrite(path)
         # write file
         with open_for_overwrite(path, encoding='utf-8') as f:
             json.dump(js, f)
