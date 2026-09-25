@@ -37,6 +37,7 @@ from bleachbit.FileUtilities import (
     _remove_windows_readonly,
     _truncate_locked_file,
     bytes_to_human,
+    children_below,
     children_in_directory,
     clean_ini,
     clean_json,
@@ -593,6 +594,43 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
         self.assertEqual(entries_files_only, [real_file])
         self.assertEqual(len(entries_files_only), 1)
 
+    @common.skipIfWindows
+    def test_children_below_path_max(self):
+        """children_below() skips paths as long as PC_PATH_MAX"""
+        top = self.mkdir('children-below-path-max')
+        sub = self.mkdir(os.path.join(top, 'd'))
+        kept = [self.write_file(os.path.join(top, 'f')),
+                self.write_file(os.path.join(sub, 'f'))]
+        long_dir = self.mkdir(os.path.join(top, 'long-dir'))
+        skipped = [self.write_file(os.path.join(sub, 'ff')),
+                   self.write_file(os.path.join(long_dir, 'f'))]
+
+        path_max = len(os.fsencode(os.path.join(sub, 'ff')))
+        with unittest.mock.patch('os.pathconf', return_value=path_max):
+            self.assertCountEqual(dict(children_below(top)), kept)
+        for fallback in ({'return_value': -1}, {'side_effect': OSError}):
+            with unittest.mock.patch('os.pathconf', **fallback):
+                self.assertCountEqual(dict(children_below(top)),
+                                      kept + skipped)
+
+    @common.skipIfWindows
+    def test_children_below(self):
+        """children_below() lists non-directories and never enters a link"""
+        top = self.mkdir('children-below')
+        real_file = self.write_file(os.path.join(top, 'file'), b'abc')
+        nested = self.mkdir(os.path.join(top, 'sub', 'nested'))
+        nested_file = self.write_file(os.path.join(nested, 'nested-file'))
+        outside = self.mkdir('children-below-outside')
+        self.write_file(os.path.join(outside, 'outside-file'))
+        dir_link = os.path.join(top, 'dir-link')
+        os.symlink(outside, dir_link)
+
+        found = dict(children_below(top))
+        self.assertCountEqual(found, [real_file, nested_file, dir_link])
+        self.assertTrue(stat.S_ISREG(found[real_file].st_mode))
+        self.assertEqual(found[real_file].st_size, 3)
+        self.assertTrue(stat.S_ISLNK(found[dir_link].st_mode))
+
     @common.skipUnlessWindows
     def test_children_in_directory_windows_links(self):
         """Windows: ensure symlinked dirs and junctions are not followed"""
@@ -790,6 +828,48 @@ State=AAAA/wA...
         with unittest.mock.patch('os.remove', side_effect=e):
             with self.assertRaises(PermissionError):
                 delete(path, shred=False)
+        self.assertExists(path)
+
+    @common.skipIfWindows
+    def test_delete_top_refuses_link(self):
+        """delete() with top does not go through a symlinked directory
+
+        The link stands in for a directory swapped for one after the walk
+        listed it.
+        """
+        top = self.mkdir('delete-top')
+        outside = self.mkdir('delete-top-outside')
+        secret = self.write_file(os.path.join(outside, 'secret'), b'secret')
+        os.symlink(outside, os.path.join(top, 'link'))
+        for shred in (False, True):
+            with self.subTest(shred=shred):
+                with self.assertRaises(OSError):
+                    delete(os.path.join(top, 'link', 'secret'),
+                           shred=shred, top=top)
+                with open(secret, 'rb') as f:
+                    self.assertEqual(f.read(), b'secret')
+
+                sub = self.mkdir(os.path.join(top, 'sub'))
+                inside = self.write_file(os.path.join(sub, 'inside'), b'abc')
+                self.assertTrue(delete(inside, shred=shred, top=top))
+                self.assertNotExists(inside)
+                self.assertTrue(delete(sub, shred=shred, top=top))
+                self.assertNotExists(sub)
+
+    @common.skipIfWindows
+    def test_delete_top_error_filename(self):
+        """An error from delete() with top names the whole path"""
+        top = self.mkdir('delete-top-error')
+        path = self.write_file(os.path.join(top, 'file'))
+
+        def denied(name, **_kwargs):
+            raise PermissionError(errno.EACCES, 'Permission denied', name)
+
+        with unittest.mock.patch('os.remove', side_effect=denied):
+            with self.assertRaises(PermissionError) as cm:
+                delete(path, shred=False, top=top)
+        self.assertEqual(cm.exception.errno, errno.EACCES)
+        self.assertEqual(cm.exception.filename, path)
         self.assertExists(path)
 
     def test_delete_windows_lstat_denied(self):

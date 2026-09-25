@@ -86,13 +86,13 @@ def _remove_windows_readonly(path):
     return False
 
 
-def _delete_path(path, delete_func):
+def _delete_path(path, delete_func, dir_fd=None):
     """
     Delete a path with parent lock if on Windows.
     """
     if IS_WINDOWS:
         return bleachbit.Windows.with_parent_lock(path, delete_func, path)
-    return delete_func(path)
+    return delete_func(path, dir_fd=dir_fd)
 
 
 def _run_with_delete_lock(path, func):
@@ -460,19 +460,138 @@ def children_in_directory(top, list_directories=False):
             yield pending_dirs.pop()
 
 
-def _open_nofollow_fd(path, flags, mode=0o600):
+def _path_max(path):
+    """Return PC_PATH_MAX for path, or 4096 where it is not known"""
+    try:
+        path_max = os.pathconf(path, 'PC_PATH_MAX')
+    except (AttributeError, OSError, ValueError):
+        return 4096
+    # -1 means there is no fixed limit
+    return path_max if path_max > 0 else 4096
+
+
+def _open_dir_below(top, dirname):
+    """Open dirname, which is top or a directory below it (POSIX)
+
+    top is opened normally, but each directory below it is opened
+    relative to its parent's descriptor with O_NOFOLLOW, so none of them
+    is followed if it is a link. Returns a descriptor the caller closes.
+    """
+    rel = os.path.relpath(dirname, top)
+    parts = [] if rel == os.curdir else rel.split(os.sep)
+    if os.pardir in parts:
+        raise ValueError(f'{dirname} is not below {top}')
+    fd = os.open(top, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in parts:
+            parent_fd = fd
+            fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent_fd)
+            os.close(parent_fd)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def children_below(top):
+    """Yield (path, lstat result) for each non-directory under top (POSIX)
+
+    Unlike children_in_directory(), each subdirectory is opened relative
+    to its parent's descriptor with O_NOFOLLOW, and each stat goes
+    through that descriptor, so a directory swapped for a symlink after
+    it was listed is skipped instead of walked into. Only top may be a
+    link. Pass the same top to delete() so the removal cannot follow one
+    either.
+
+    A descriptor stays open for each directory from top down to the one
+    being listed.
+    """
+    flags = os.O_RDONLY | os.O_DIRECTORY
+    path_max = _path_max(top)
+    try:
+        top_fd = os.open(top, flags)
+    except OSError:
+        return
+    # Directories to list, as (parent_fd, name, path). An item without a
+    # name closes parent_fd once the subdirectories above it, which are
+    # opened relative to it, are done. top itself is listed through '.'.
+    stack = [(top_fd, None, None), (top_fd, os.curdir, top)]
+    try:
+        while stack:
+            parent_fd, name, dirpath = stack.pop()
+            if name is None:
+                os.close(parent_fd)
+                continue
+            try:
+                dir_fd = os.open(name, flags | os.O_NOFOLLOW,
+                                 dir_fd=parent_fd)
+            except OSError:
+                # Gone, or no longer a directory
+                continue
+            stack.append((dir_fd, None, None))
+            subdirs = []
+            try:
+                with os.scandir(dir_fd) as scandir_it:
+                    for entry in scandir_it:
+                        path = os.path.join(dirpath, entry.name)
+                        if len(os.fsencode(path)) >= path_max:
+                            # Too long for the path-based calls made on it
+                            continue
+                        try:
+                            st = entry.stat(follow_symlinks=False)
+                        except OSError:
+                            continue
+                        if stat.S_ISDIR(st.st_mode):
+                            subdirs.append((dir_fd, entry.name, path))
+                        else:
+                            yield path, st
+            except OSError:
+                # The directory may disappear or become unreadable mid-iteration
+                pass
+            # Reversed so siblings are visited in the order scandir returned them
+            stack.extend(reversed(subdirs))
+    finally:
+        for parent_fd, name, _dirpath in stack:
+            if name is None:
+                os.close(parent_fd)
+
+
+def _islink(path, dir_fd=None):
+    """os.path.islink(), with path relative to dir_fd if given"""
+    if dir_fd is None:
+        return os.path.islink(path)
+    try:
+        return stat.S_ISLNK(os.lstat(path, dir_fd=dir_fd).st_mode)
+    except OSError:
+        return False
+
+
+def _lexists(path, dir_fd=None):
+    """os.path.lexists(), with path relative to dir_fd if given"""
+    if dir_fd is None:
+        return os.path.lexists(path)
+    try:
+        os.lstat(path, dir_fd=dir_fd)
+    except OSError:
+        return False
+    return True
+
+
+def _open_nofollow_fd(path, flags, mode=0o600, dir_fd=None):
     """Open path with os.open(), refusing a symlink (or Windows junction).
 
     Adds O_NOFOLLOW to flags on POSIX so a symlink raced in after the
     islink() check is also refused, instead of redirecting the open to
     its target. Windows has no O_NOFOLLOW; the islink() check is the
-    only protection there. Returns a raw file descriptor.
+    only protection there. With dir_fd, path is relative to that
+    directory. Returns a raw file descriptor.
     """
-    if os.path.islink(path):
+    if _islink(path, dir_fd):
         raise OSError(errno.EACCES, 'refusing to open a link', path)
     if hasattr(os, 'O_NOFOLLOW'):
         flags |= os.O_NOFOLLOW
-    return os.open(path, flags, mode)
+    return os.open(path, flags, mode, dir_fd=dir_fd)
 
 
 def open_for_overwrite(path, mode='w', **kwargs):
@@ -604,19 +723,20 @@ def _truncate_locked_file(path):
         return False
 
 
-def _delete_file_impl(path, shred):
+def _delete_file_impl(path, shred, dir_fd=None):
     """"Delete a file
 
     - File must exist.
     - Not for use with directories.
     - Does not check the user's preferences.
+    - With dir_fd, path is relative to that directory.
 
     Returns True.
     """
     # wipe contents
-    if shred and not is_hard_link(path):
+    if shred and not is_hard_link(path, dir_fd):
         try:
-            wipe_contents(path)
+            wipe_contents(path, dir_fd)
         except pywinerror as e:
             # 2 = The system cannot find the file specified.
             # This can happen with a broken symlink
@@ -630,11 +750,11 @@ def _delete_file_impl(path, shred):
                          e.errno, path)
     if shred:
         # wipe name
-        os.remove(wipe_name(path))
+        os.remove(wipe_name(path, dir_fd), dir_fd=dir_fd)
         return True
     # Code below is shred == False
     try:
-        os.remove(path)
+        os.remove(path, dir_fd=dir_fd)
     except PermissionError as e:
         if IS_WINDOWS and hasattr(e, 'winerror'):
             if e.winerror == 32:
@@ -657,9 +777,9 @@ def _delete_file_impl(path, shred):
     return True
 
 
-def delete_file(path, shred):
+def delete_file(path, shred, dir_fd=None):
     return _run_with_delete_lock(
-        path, lambda: _delete_file_impl(path, shred))
+        path, lambda: _delete_file_impl(path, shred, dir_fd))
 
 
 def truncate_file(path):
@@ -676,15 +796,15 @@ def truncate_file(path):
     _run_with_delete_lock(path, _truncate)
 
 
-def _file_type(path):
+def _file_type(path, dir_fd=None):
     """Return the file type bits of path, or None if it is missing
 
     On Windows only the type bits are set, and 0 means a type delete()
-    does not handle.
+    does not handle. dir_fd is POSIX only.
     """
     if IS_POSIX:
         try:
-            return os.lstat(path).st_mode
+            return os.lstat(path, dir_fd=dir_fd).st_mode
         except (OSError, ValueError):
             return None
     # os.lstat() returns Access Denied on some Windows files that the
@@ -711,7 +831,8 @@ def _file_type(path):
     return 0
 
 
-def delete(path, shred=False, ignore_missing=False, allow_shred=True):
+def delete(path, shred=False, ignore_missing=False, allow_shred=True,
+           top=None):
     """Delete path that is either file, directory, link or FIFO.
 
        If shred is enabled as a function parameter or the BleachBit global
@@ -724,32 +845,61 @@ def delete(path, shred=False, ignore_missing=False, allow_shred=True):
        * Windows junction
        * Windows .lnk files
 
+       top is a directory above path, as walked by children_below(). On
+       POSIX each directory from top down to path is then opened with
+       O_NOFOLLOW and path is removed relative to the last one, so a
+       directory swapped for a symlink is refused instead of followed.
+
        Returns True if the path was deleted, False otherwise.
     """
     from bleachbit.Options import options
     path = extended_path(path)
     do_shred = allow_shred and (shred or options.get('shred'))
-    mode = _file_type(path)
+    if top is None or not IS_POSIX:
+        return _delete(path, path, do_shred, ignore_missing)
+    try:
+        dir_fd = _open_dir_below(top, os.path.dirname(path))
+    except OSError as e:
+        if ignore_missing and errno.ENOENT == e.errno:
+            return False
+        # Name the whole path, not just the directory that failed
+        raise OSError(e.errno, e.strerror, path) from e
+    try:
+        return _delete(path, os.path.basename(path), do_shred,
+                       ignore_missing, dir_fd)
+    except OSError as e:
+        # Name the whole path, not what was relative to dir_fd
+        if isinstance(e.filename, int) or (
+                e.filename is not None and not os.path.isabs(e.filename)):
+            e.filename = path
+        raise
+    finally:
+        os.close(dir_fd)
+
+
+def _delete(path, name, do_shred, ignore_missing, dir_fd=None):
+    """Body of delete(), acting on name relative to dir_fd if given"""
+    mode = _file_type(name, dir_fd)
     if mode is None:
         if ignore_missing:
             return False
         raise OSError(2, 'No such file or directory', path)
     if stat.S_ISLNK(mode) or stat.S_ISFIFO(mode):
-        _delete_path(path, os.remove)
+        _delete_path(name, os.remove, dir_fd=dir_fd)
         return True
     if stat.S_ISDIR(mode):
-        delpath = path
+        delpath = name
         # TRANSLATORS: Log message where %s is the pathname.
         not_empty_msg = _("Directory is not empty: %s")
         if do_shred:
-            if not is_dir_empty(path):
+            if not is_dir_empty(name, dir_fd):
                 # Avoid renaming non-empty directory like
                 # https://github.com/bleachbit/bleachbit/issues/783
                 logger.info(not_empty_msg, path)
                 return False
-            delpath = wipe_name(path)
+            delpath = wipe_name(name, dir_fd)
         try:
-            _delete_path(delpath, os.rmdir)
+            _delete_path(delpath, os.rmdir, dir_fd=dir_fd)
         except OSError as e:
             # [Errno 39] Directory not empty
             # https://bugs.launchpad.net/bleachbit/+bug/1012930
@@ -783,7 +933,7 @@ def delete(path, shred=False, ignore_missing=False, allow_shred=True):
             raise
         return True
     if stat.S_ISREG(mode):
-        delete_file(path, do_shred)
+        delete_file(name, do_shred, dir_fd=dir_fd)
         return True
     # TRANSLATORS: Log message where %s is the pathname.
     logger.info(_("Special file type cannot be deleted: %s"), path)
@@ -987,12 +1137,14 @@ def free_space(pathname):
     return mystat.f_bavail * mystat.f_bsize
 
 
-def getsize(path):
+def getsize(path, dir_fd=None):
     """Return the actual file size considering spare files
-       and symlinks"""
+       and symlinks
+
+       dir_fd is POSIX only."""
     if IS_POSIX:
         try:
-            __stat = os.lstat(path)
+            __stat = os.lstat(path, dir_fd=dir_fd)
         except OSError as e:
             # OSError: [Errno 13] Permission denied
             # can happen when a regular user is trying to find the size of /var/log/hp/tmp
@@ -1101,20 +1253,34 @@ def human_to_bytes(human, hformat='si'):
     return int(float(amount) * base**exponent)
 
 
-def is_dir_empty(dirname):
+def is_dir_empty(dirname, dir_fd=None):
     """Returns boolean whether directory is empty.
 
-    It assumes the path exists and is a directory.
+    It assumes the path exists and is a directory. With dir_fd, dirname
+    is relative to that directory and is not followed if it is a link.
     """
+    if dir_fd is not None:
+        fd = os.open(dirname, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                     dir_fd=dir_fd)
+        try:
+            return is_dir_empty(fd)
+        finally:
+            os.close(fd)
     with os.scandir(dirname) as it:
         for _entry in it:
             return False
     return True
 
 
-def is_hard_link(path):
+def is_hard_link(path, dir_fd=None):
     """Check if a file is a hard link."""
-    return os.path.isfile(path) and os.stat(path).st_nlink > 1
+    if dir_fd is None:
+        return os.path.isfile(path) and os.stat(path).st_nlink > 1
+    try:
+        st = os.stat(path, dir_fd=dir_fd)
+    except OSError:
+        return False
+    return stat.S_ISREG(st.st_mode) and st.st_nlink > 1
 
 
 def is_normal_directory(path):
