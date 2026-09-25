@@ -551,6 +551,8 @@ class CleanerTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
             ('/tmp/.vbox-foo-ipc/lock', True),
             ('/tmp/.wine-500/server-806-102400f/lock', True),
             ('/tmp/gconfd-foo/lock/ior', True),
+            ('/tmp/hsperfdata_foo/1234', True),
+            ('/tmp/hsperfdata_foo', False),
             ('/tmp/ksocket-foo/Arts_SoundServerV2', True),
             ('/tmp/ksocket-foo/secret-cookie', True),
             ('/tmp/orbit-foo/bonobo-activation-register-a9cd6cc4973af098918b154c4957a93f.lock', True),

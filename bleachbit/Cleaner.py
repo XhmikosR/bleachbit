@@ -655,6 +655,8 @@ class System(Cleaner):
             r'^/tmp/\.wine-[0-9]+/server-.*/lock$',
             '^/tmp/fsa/',  # fsarchiver
             '^/tmp/gconfd-[^/]+/lock/ior$',
+            # JVM perf data, mapped with no open fd that FreeBSD would list
+            '^/tmp/hsperfdata_[^/]+/',
             '^/tmp/kde-',
             '^/tmp/kdesudo-',
             '^/tmp/ksocket-',

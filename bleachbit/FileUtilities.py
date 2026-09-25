@@ -117,8 +117,23 @@ def close_delete_parent_lock():
 
 
 def open_files_linux():
-    """Return iterator of open files on Linux"""
-    return glob.iglob("/proc/*/fd/*")
+    """Return iterator of open and memory-mapped files on Linux"""
+    yield from glob.iglob("/proc/*/fd/*")
+    # A file can be closed after mmap(), as the JVM does with hsperfdata
+    mapped = set()
+    for maps in glob.iglob("/proc/*/maps"):
+        try:
+            with open(maps, 'rb') as f:
+                for line in f:
+                    # address perms offset dev inode pathname
+                    fields = line.split(maxsplit=5)
+                    if len(fields) == 6 and fields[4] != b'0' and \
+                            fields[5].startswith(b'/'):
+                        mapped.add(os.fsdecode(fields[5].rstrip(b'\n')))
+        except OSError:
+            # The process exited, or it belongs to another user
+            continue
+    yield from mapped
 
 
 FilesystemInfo = collections.namedtuple(
@@ -258,7 +273,7 @@ def open_files_lsof(run_lsof=None):
 
 
 def open_files_psutil():
-    """Return iterator of open files using psutil
+    """Return iterator of open and memory-mapped files using psutil
 
     FreeBSD lsof typically lists cwd and the process executable but not
     file descriptors unless it is setgid kmem. psutil uses
@@ -266,6 +281,7 @@ def open_files_psutil():
     """
     # pylint: disable=import-outside-toplevel
     import psutil
+    mapped = set()
     for proc in psutil.process_iter():
         try:
             open_file_list = proc.open_files()
@@ -276,6 +292,14 @@ def open_files_psutil():
             # created O_WRONLY file (Python's 'wb').
             if ofile.path:
                 yield ofile.path
+        # A file can be closed after mmap(), as the JVM does with hsperfdata
+        try:
+            maps = proc.memory_maps()
+        except (psutil.Error, OSError, NotImplementedError, AttributeError):
+            continue
+        # Anonymous and other non-file maps have names like [anon]
+        mapped.update(m.path for m in maps if m.path.startswith('/'))
+    yield from mapped
 
 
 def open_files_freebsd():
