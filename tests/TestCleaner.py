@@ -523,6 +523,10 @@ class CleanerTestCase(common.BleachbitTestCase):
     def test_whitelist(self):
         """Unit test for method Cleaner.whitelisted"""
         tests = [
+            ('/tmp/.X0-lock', True),
+            ('/tmp/.X1-lock', True),
+            ('/tmp/.X99-lock', True),
+            ('/tmp/.X-lock', False),
             ('/tmp/.truecrypt_aux_mnt1/control', True),
             ('/tmp/.truecrypt_aux_mnt1/volume', True),
             ('/tmp/.vbox-foo-ipc/lock', True),
