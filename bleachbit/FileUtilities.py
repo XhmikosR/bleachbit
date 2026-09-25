@@ -519,22 +519,18 @@ def _path_max(path):
 
 
 def _open_dir_below(top, dirname):
-    """Open dirname, which is top or a directory below it (POSIX)
-
-    top is opened normally, but each directory below it is opened
-    relative to its parent's descriptor with O_NOFOLLOW, so none of them
-    is followed if it is a link. Returns a descriptor the caller closes.
-    """
+    """Return a dir_fd for dirname, following no link below top (POSIX)"""
     rel = os.path.relpath(dirname, top)
     parts = [] if rel == os.curdir else rel.split(os.sep)
     if os.pardir in parts:
         raise ValueError(f'{dirname} is not below {top}')
-    fd = os.open(top, os.O_RDONLY | os.O_DIRECTORY)
+    # O_PATH needs only search permission, like a path lookup
+    flags = getattr(os, 'O_PATH', os.O_RDONLY) | os.O_DIRECTORY
+    fd = os.open(top, flags)
     try:
         for part in parts:
             parent_fd = fd
-            fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                         dir_fd=parent_fd)
+            fd = os.open(part, flags | os.O_NOFOLLOW, dir_fd=parent_fd)
             os.close(parent_fd)
     except BaseException:
         os.close(fd)
@@ -542,35 +538,31 @@ def _open_dir_below(top, dirname):
     return fd
 
 
-def children_below(top, same_device=False):
-    """Yield (path, lstat result) for each non-directory under top (POSIX)
+def children_below(dirname, list_directories=False, same_device=False,
+                   top=None):
+    """Yield (path, lstat result) under dirname, following no link (POSIX)
 
-    Unlike children_in_directory(), each subdirectory is opened relative
-    to its parent's descriptor with O_NOFOLLOW, and each stat goes
-    through that descriptor, so a directory swapped for a symlink after
-    it was listed is skipped instead of walked into. Only top may be a
-    link. Pass the same top to delete() so the removal cannot follow one
-    either.
+    Unlike children_in_directory(), this also skips a directory swapped
+    for a link after it was listed. dirname is opened from top, if given,
+    as delete() does, so pass delete() the same top, or else dirname.
 
-    With same_device, mount points below top, bind mounts of its own
-    filesystem included, are not walked into.
-
-    A descriptor stays open for each directory from top down to the one
-    being listed.
+    With list_directories, directories come last, deepest first. With
+    same_device, mount points below dirname are skipped, bind mounts
+    included. A descriptor stays open per directory level.
     """
     flags = os.O_RDONLY | os.O_DIRECTORY
-    path_max = _path_max(top)
+    path_max = _path_max(dirname)
     try:
-        top_fd = os.open(top, flags)
-    except OSError:
+        root_fd = _open_dir_below(dirname if top is None else top, dirname)
+    except OSError as e:
+        logger.debug('cannot walk %s: %s', dirname, e)
         return
-    # Directories to list, as (parent_fd, name, path). An item without a
-    # name closes parent_fd once the subdirectories above it, which are
-    # opened relative to it, are done. top itself is listed through '.'.
-    stack = [(top_fd, None, None), (top_fd, os.curdir, top)]
+    pending_dirs = []
+    # (parent_fd, name, path); name None closes parent_fd after its subdirs
+    stack = [(root_fd, None, None), (root_fd, os.curdir, dirname)]
     try:
-        top_dev = os.fstat(top_fd).st_dev
-        mounts = _mount_points_below(top) if same_device else ()
+        root_dev = os.fstat(root_fd).st_dev
+        mounts = _mount_points_below(dirname) if same_device else ()
         while stack:
             parent_fd, name, dirpath = stack.pop()
             if name is None:
@@ -596,9 +588,12 @@ def children_below(top, same_device=False):
                         except OSError:
                             continue
                         if stat.S_ISDIR(st.st_mode):
-                            if not same_device or (st.st_dev == top_dev and
-                                                   path not in mounts):
-                                subdirs.append((dir_fd, entry.name, path))
+                            if same_device and (st.st_dev != root_dev or
+                                                path in mounts):
+                                continue
+                            if list_directories:
+                                pending_dirs.append((path, st))
+                            subdirs.append((dir_fd, entry.name, path))
                         elif not (same_device and path in mounts):
                             yield path, st
             except OSError:
@@ -610,6 +605,9 @@ def children_below(top, same_device=False):
         for parent_fd, name, _dirpath in stack:
             if name is None:
                 os.close(parent_fd)
+    pending_dirs.sort(key=lambda item: len(item[0]))
+    while pending_dirs:
+        yield pending_dirs.pop()
 
 
 def _islink(path, dir_fd=None):
@@ -898,10 +896,8 @@ def delete(path, shred=False, ignore_missing=False, allow_shred=True,
        * Windows junction
        * Windows .lnk files
 
-       top is a directory above path, as walked by children_below(). On
-       POSIX each directory from top down to path is then opened with
-       O_NOFOLLOW and path is removed relative to the last one, so a
-       directory swapped for a symlink is refused instead of followed.
+       top is a directory above path, as used with children_below(). On
+       POSIX no link between top and path is then followed.
 
        Returns True if the path was deleted, False otherwise.
     """
