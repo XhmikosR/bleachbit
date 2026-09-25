@@ -649,7 +649,7 @@ class System(Cleaner):
         # re.escape because a home directory may contain regex metacharacters
         home = re.escape(os.path.expanduser('~'))
         regexes = [
-            r'^/tmp/\.X0-lock$',
+            r'^/tmp/\.X[0-9]+-lock$',
             r'^/tmp/\.truecrypt_aux_mnt.*/(control|volume)$',
             r'^/tmp/\.vbox-[^/]+-ipc/lock$',
             r'^/tmp/\.wine-[0-9]+/server-.*/lock$',
