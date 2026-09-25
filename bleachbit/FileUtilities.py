@@ -946,7 +946,10 @@ def _delete(path, name, do_shred, ignore_missing, dir_fd=None):
                 # https://github.com/bleachbit/bleachbit/issues/783
                 logger.info(not_empty_msg, path)
                 return False
-            delpath = wipe_name(name, dir_fd)
+            # Under its parent's lock, as a lock still held on this
+            # directory from deleting its contents would block the rename
+            delpath = _run_with_delete_lock(
+                name, lambda: wipe_name(name, dir_fd))
         removed = False
         try:
             try:

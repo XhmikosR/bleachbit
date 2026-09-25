@@ -81,6 +81,8 @@ if IS_WINDOWS:
 logger = logging.getLogger(__name__)
 
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+# IsReparseTagNameSurrogate(): set for symlinks and junctions
+IO_REPARSE_TAG_NAME_SURROGATE = 0x20000000
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 SPLASH_ICON_SIZE_PX = 256  # 256x256 pixels
@@ -389,6 +391,32 @@ def _close_delete_parent_lock():
         _delete_parent_lock_key = None
 
 
+def _check_delete_parent(handle, pathname):
+    """Refuse the locked parent of pathname if it is a link
+
+    The check goes through the handle, so it is about the directory that
+    is locked. Like FileUtilities.delete(), it treats only name
+    surrogates such as symlinks and junctions as links, and not other
+    reparse points such as cloud placeholders.
+    """
+    try:
+        info = win32file.GetFileInformationByHandleEx(
+            handle, win32file.FileAttributeTagInfo)
+        attrs = info['FileAttributes']
+        is_link = info['ReparseTag'] & IO_REPARSE_TAG_NAME_SURROGATE
+    except pywintypes.error as e:
+        # Some devices cannot report a reparse tag: invalid function, not
+        # supported, invalid parameter. Then refuse any reparse point.
+        if e.winerror not in (1, 50, 87):
+            raise
+        attrs = win32file.GetFileInformationByHandle(handle)[0]
+        is_link = True
+    if attrs & FILE_ATTRIBUTE_REPARSE_POINT and is_link:
+        raise OSError(errno.EACCES,
+                      "Refusing to delete through a directory link",
+                      pathname)
+
+
 def _lock_delete_parent(pathname):
     """
     Lock the parent directory of pathname to prevent it from being deleted.
@@ -404,16 +432,28 @@ def _lock_delete_parent(pathname):
     parent_key = os.path.normcase(parent)
     if _delete_parent_lock_handle is not None and _delete_parent_lock_key == parent_key:
         logger.debug('Reusing parent lock handle for %s', parent_key)
+        # The lock does not stop the parent from being made a junction
+        # once it is empty, so check it again
+        try:
+            _check_delete_parent(_delete_parent_lock_handle, pathname)
+        except Exception:
+            _close_delete_parent_lock()
+            raise
         return
     _close_delete_parent_lock()
     flags = win32con.FILE_FLAG_BACKUP_SEMANTICS | getattr(
         win32con, 'FILE_FLAG_OPEN_REPARSE_POINT', 0x00200000)
-    access = getattr(win32con, 'FILE_READ_ATTRIBUTES', 0x80)
+    # Share modes are ignored for an open that only reads attributes, so
+    # also ask to list the directory. Then leaving out FILE_SHARE_DELETE
+    # stops it from being renamed or deleted while the handle is open.
+    # FILE_SHARE_WRITE still lets entries be renamed within it.
+    access = getattr(win32con, 'FILE_LIST_DIRECTORY', 0x1) | getattr(
+        win32con, 'FILE_READ_ATTRIBUTES', 0x80)
     try:
         handle = win32file.CreateFile(
             parent,
             access,
-            win32con.FILE_SHARE_READ,
+            win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
             None,
             win32con.OPEN_EXISTING,
             flags,
@@ -427,15 +467,10 @@ def _lock_delete_parent(pathname):
                       "Access denied locking directory before delete()",
                       pathname)
     try:
-        attrs = win32file.GetFileAttributesW(parent)
-    except pywintypes.error:
+        _check_delete_parent(handle, pathname)
+    except Exception:
         win32file.CloseHandle(handle)
         raise
-    if attrs & FILE_ATTRIBUTE_REPARSE_POINT:
-        win32file.CloseHandle(handle)
-        raise OSError(errno.EACCES,
-                      "Refusing to delete through a directory link",
-                      pathname)
     logger.debug('Opened parent lock handle for %s', parent_key)
     _delete_parent_lock_handle = handle
     _delete_parent_lock_key = parent_key
