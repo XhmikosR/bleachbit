@@ -294,7 +294,16 @@ def cleanup_nonce():
         # and deletes shared %TEMP% files with a %TEMP% parent lock, racing
         # other workers.
         return
+    # Like the tmp cleaner, keep recent ones: the session bus may still be
+    # serving another instance, and without its nonce file a second
+    # instance can start.
+    max_age_seconds = 7 * 24 * 60 * 60
     for fn in glob.glob(os.path.expandvars(r'%TEMP%\gdbus-nonce-file-*')):
+        try:
+            if time.time() - os.stat(fn).st_mtime < max_age_seconds:
+                continue
+        except OSError:
+            continue
         logger.debug('cleaning GTK nonce file: %s', fn)
         FileUtilities.delete(fn)
 
