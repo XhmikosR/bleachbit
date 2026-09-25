@@ -1333,6 +1333,40 @@ State=AAAA/wA...
         os.remove(fn)
         self.assertTrue(is_dir_empty(dirname))
 
+    def test_delete_shred_dir_filled_after_check(self):
+        """A shredded directory that gains an entry keeps its name"""
+        dirname = self.mkdir('filled_dir')
+        fn = self.write_file(os.path.join(dirname, 'a_file'), b'content')
+        # As if the entry was created after the emptiness check
+        with unittest.mock.patch('bleachbit.FileUtilities.is_dir_empty',
+                                 return_value=True):
+            self.assertFalse(delete(dirname, shred=True))
+        self.assertExists(fn)
+
+    def test_delete_shred_dir_left_renamed(self):
+        """The error names where a shredded directory is left renamed"""
+        real_rename = os.rename
+
+        def rename(src, dst, **kwargs):
+            if os.path.basename(dst) == 'renamed_dir':
+                raise PermissionError(errno.EACCES, 'Permission denied', src)
+            return real_rename(src, dst, **kwargs)
+
+        for top in (None, self.tempdir):
+            with self.subTest(top=top):
+                dirname = self.mkdir('renamed_dir')
+                self.write_file(os.path.join(dirname, 'a_file'), b'content')
+                with unittest.mock.patch(
+                        'bleachbit.FileUtilities.is_dir_empty',
+                        return_value=True), \
+                        unittest.mock.patch('os.rename', side_effect=rename):
+                    with self.assertRaises(OSError) as cm:
+                        delete(dirname, shred=True, top=top)
+                left = cm.exception.filename
+                self.assertNotEqual(os.path.basename(left), 'renamed_dir')
+                self.assertExists(os.path.join(left, 'a_file'))
+                self.assertNotExists(dirname)
+
     def test_delete_read_only_file(self):
         """Unit test for delete() with read-only file"""
         for option_shred, parameter_shred, delete_func in itertools.product(
