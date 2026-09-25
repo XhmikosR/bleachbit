@@ -573,3 +573,15 @@ class GeneralTestCase(common.BleachbitTestCase):
     def test_sudo_mode(self):
         """Unit test for sudo_mode"""
         self.assertIsInstance(sudo_mode(), bool)
+
+    @common.skipIfWindows
+    def test_sudo_mode_follows_sudo_uid(self):
+        """sudo_mode() must be True on every POSIX system when SUDO_UID is set
+
+        macOS keeps HOME under sudo, so files it creates there need chownself().
+        """
+        with mock.patch.dict(os.environ, {'SUDO_UID': str(os.getuid())}):
+            self.assertTrue(sudo_mode())
+        with mock.patch.dict(os.environ):
+            os.environ.pop('SUDO_UID', None)
+            self.assertFalse(sudo_mode())
