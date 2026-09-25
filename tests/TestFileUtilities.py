@@ -669,6 +669,8 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
                                  return_value={bind, file_bind}):
             self.assertEqual(list(dict(children_below(top, same_device=True))),
                              [top_file])
+            self.assertEqual(list(dict(children_below(
+                top, list_directories=True, same_device=True))), [top_file])
             self.assertEqual(
                 list(children_in_directory(top, True, same_device=True)),
                 [top_file])
@@ -709,6 +711,38 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
                              [top_file])
             self.assertCountEqual(dict(children_below(top)),
                                   [top_file, sub_file])
+
+    @common.skipIfWindows
+    def test_children_below_search_only(self):
+        """children_below() and delete() need only search permission above"""
+        if not hasattr(os, 'O_PATH'):
+            self.skipTest('O_PATH is not available')
+        if os.geteuid() == 0:
+            self.skipTest('root can read any directory')
+        top = self.mkdir('children-below-search-only')
+        middle = self.mkdir(os.path.join(top, 'middle'))
+        sub = self.mkdir(os.path.join(middle, 'dir', 'sub'))
+        path = self.write_file(os.path.join(sub, 'file'))
+        os.chmod(top, 0o100)
+        os.chmod(middle, 0o100)
+        try:
+            found = [p for p, _st in children_below(
+                os.path.dirname(sub), list_directories=True, top=top)]
+            self.assertEqual(found, [path, sub])
+            for p in found:
+                self.assertTrue(delete(p, shred=False, top=top))
+        finally:
+            os.chmod(middle, 0o700)
+            os.chmod(top, 0o700)
+        self.assertNotExists(sub)
+
+    @common.skipIfWindows
+    def test_children_below_log_root(self):
+        """children_below() logs a directory it cannot open"""
+        missing = os.path.join(self.tempdir, 'children-below-missing')
+        with self.assertLogs('bleachbit.FileUtilities', level='DEBUG') as cm:
+            self.assertEqual(list(children_below(missing)), [])
+        self.assertIn(missing, cm.output[0])
 
     @common.skipUnlessWindows
     def test_children_in_directory_windows_links(self):
