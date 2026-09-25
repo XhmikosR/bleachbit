@@ -36,6 +36,7 @@ from bleachbit import FileUtilities, General
 from bleachbit.Command import Delete, Function
 from bleachbit.FileUtilities import extended_path, extended_path_undo
 from bleachbit.Windows import (
+    cleanup_nonce,
     clear_clipboard,
     delete_locked_file,
     delete_registry_key,
@@ -134,6 +135,29 @@ class WindowsSystemPathsTestCase(common.BleachbitTestCase):
             [r'C:\Windows\Sysnative\LogFiles\*.log',
              r'C:\Windows\SysWOW64\LogFiles\*.log'],
             paths)
+
+
+class WindowsNonceTestCase(common.BleachbitTestCase):
+    """Test cleanup_nonce()"""
+
+    def test_cleanup_nonce_keeps_recent(self):
+        """cleanup_nonce() keeps a nonce file the session bus may still use"""
+        self.write_file('gdbus-nonce-file-LIVE01', b'nonce')
+        stale = self.write_file('gdbus-nonce-file-OLD001', b'nonce')
+        old = time.time() - 8 * 24 * 60 * 60
+        os.utime(stale, (old, old))
+        tempdir = self.tempdir
+        real_expandvars = os.path.expandvars
+
+        def expandvars(path):
+            return real_expandvars(path.replace('%TEMP%\\', tempdir + os.sep))
+
+        mock_delete = mock.Mock()
+        with common.set_temporary_env('BLEACHBIT_TEST_OPTIONS_DIR', None), \
+                mock.patch('os.path.expandvars', expandvars), \
+                mock.patch.object(FileUtilities, 'delete', mock_delete):
+            cleanup_nonce()
+        mock_delete.assert_called_once_with(stale)
 
 
 if bleachbit.IS_WINDOWS:
