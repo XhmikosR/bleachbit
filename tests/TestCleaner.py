@@ -25,6 +25,11 @@ from bleachbit.PathUtils import path_startswith
 
 from tests import common
 
+if IS_WINDOWS:
+    from tests.TestWindows import WindowsLinksMixIn
+else:
+    WindowsLinksMixIn = object
+
 logger = logging.getLogger('bleachbit')
 
 
@@ -69,7 +74,7 @@ def register_all_cleaners():
     assert len(backends) > 1
 
 
-class CleanerTestCase(common.BleachbitTestCase):
+class CleanerTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
 
     @classmethod
     def setUpClass(cls):
@@ -253,6 +258,42 @@ class CleanerTestCase(common.BleachbitTestCase):
 
         for dirname in dirnames:
             self.assertNotExists(dirname)
+
+    @common.skipIfWindows
+    def test_create_simple_cleaner_directory_link(self):
+        """Shredding a link to a directory removes only the link"""
+        target = self.mkdir('csc-link-target')
+        target_file = os.path.join(target, 'file.txt')
+        common.touch_file(target_file)
+        link = os.path.join(self.tempdir, 'csc-link')
+        os.symlink(target, link)
+
+        cleaner = create_simple_cleaner([link])
+        cmds = list(cleaner.get_commands('files'))
+        self.assertEqual([cmd.path for cmd in cmds], [link])
+        for cmd in cmds:
+            list(cmd.execute(True))
+
+        self.assertNotLExists(link)
+        self.assertExists(target_file)
+
+    @common.skipUnlessWindows
+    def test_create_simple_cleaner_junction(self):
+        """Shredding a junction removes only the junction"""
+        target = self.mkdir('csc-junction-target')
+        target_file = os.path.join(target, 'file.txt')
+        common.touch_file(target_file)
+        junction = os.path.join(self.tempdir, 'csc-junction')
+        self._create_win_junction(target, junction)
+
+        cleaner = create_simple_cleaner([junction])
+        cmds = list(cleaner.get_commands('files'))
+        self.assertEqual([cmd.path for cmd in cmds], [junction])
+        for cmd in cmds:
+            list(cmd.execute(True))
+
+        self.assertNotLExists(junction)
+        self.assertExists(target_file)
 
     def test_create_simple_cleaner_refuses_cwd(self):
         """create_simple_cleaner must refuse to shred CWD or its parent."""

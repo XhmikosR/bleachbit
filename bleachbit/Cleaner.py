@@ -794,7 +794,9 @@ class CustomFileAction(Action.ActionProvider):
             path = simpler_cleaner_process_path(path)
             if not path:
                 continue
-            if os.path.isdir(path):
+            # Like delete(), shred a link or junction, not its target
+            # pylint: disable-next=protected-access
+            if stat.S_ISDIR(FileUtilities._file_type(path) or 0):
                 for child in children_in_directory(path, True):
                     yield Command.Shred(child)
             yield Command.Shred(path)
