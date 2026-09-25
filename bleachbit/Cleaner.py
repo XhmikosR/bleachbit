@@ -794,7 +794,9 @@ class CustomFileAction(Action.ActionProvider):
             path = simpler_cleaner_process_path(path)
             if not path:
                 continue
-            if os.path.isdir(path):
+            # Like delete(), shred a link to a directory as a link, not
+            # the target's contents. islink() covers junctions on Windows.
+            if os.path.isdir(path) and not os.path.islink(path):
                 for child in children_in_directory(path, True):
                     yield Command.Shred(child)
             yield Command.Shred(path)

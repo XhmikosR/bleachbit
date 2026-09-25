@@ -254,6 +254,24 @@ class CleanerTestCase(common.BleachbitTestCase):
         for dirname in dirnames:
             self.assertNotExists(dirname)
 
+    @common.skipIfWindows
+    def test_create_simple_cleaner_directory_link(self):
+        """Shredding a link to a directory removes only the link"""
+        target = self.mkdir('csc-link-target')
+        target_file = os.path.join(target, 'file.txt')
+        common.touch_file(target_file)
+        link = os.path.join(self.tempdir, 'csc-link')
+        os.symlink(target, link)
+
+        cleaner = create_simple_cleaner([link])
+        cmds = list(cleaner.get_commands('files'))
+        self.assertEqual([cmd.path for cmd in cmds], [link])
+        for cmd in cmds:
+            list(cmd.execute(True))
+
+        self.assertNotLExists(link)
+        self.assertExists(target_file)
+
     def test_create_simple_cleaner_refuses_cwd(self):
         """create_simple_cleaner must refuse to shred CWD or its parent."""
         cwd = os.getcwd()
