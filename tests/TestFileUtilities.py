@@ -16,6 +16,7 @@ import errno
 import itertools
 import json
 import locale
+import mmap
 import os
 import sqlite3
 import stat
@@ -2106,6 +2107,25 @@ State=AAAA/wA...
         os.unlink(filename)
         openfiles.scan()
         self.assertFalse(openfiles.is_open(filename))
+
+    @common.skipUnlessLinux
+    def test_open_files_mapped(self):
+        """OpenFiles counts a file that is mapped but no longer open
+
+        The JVM does this with its hsperfdata files in /tmp.
+        """
+        if sys.version_info < (3, 13):
+            self.skipTest('mmap needs trackfd=False to not keep a descriptor')
+        filename = self.write_file(
+            'bleachbit-test-open-files-mapped', b'x' * 4096)
+        with open(filename, 'rb') as f:
+            mapped = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ,
+                               trackfd=False)
+        try:
+            self.assertTrue(OpenFiles().is_open(filename))
+        finally:
+            mapped.close()
+        self.assertFalse(OpenFiles().is_open(filename))
 
     def test_same_partition(self):
         """Unit test for same_partition()"""

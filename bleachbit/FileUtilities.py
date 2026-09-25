@@ -115,8 +115,27 @@ def close_delete_parent_lock():
 
 
 def open_files_linux():
-    """Return iterator of open files on Linux"""
-    return glob.iglob("/proc/*/fd/*")
+    """Return iterator of open files on Linux
+
+    Memory-mapped files count too. A program can close a file after
+    mapping it, like the JVM does with hsperfdata, and then only its
+    maps list it.
+    """
+    yield from glob.iglob("/proc/*/fd/*")
+    mapped = set()
+    for maps in glob.iglob("/proc/*/maps"):
+        try:
+            with open(maps, 'rb') as f:
+                for line in f:
+                    # address perms offset dev inode pathname
+                    fields = line.split(maxsplit=5)
+                    if len(fields) == 6 and fields[4] != b'0' and \
+                            fields[5].startswith(b'/'):
+                        mapped.add(os.fsdecode(fields[5].rstrip(b'\n')))
+        except OSError:
+            # The process exited, or it belongs to another user
+            continue
+    yield from mapped
 
 
 FilesystemInfo = collections.namedtuple(
