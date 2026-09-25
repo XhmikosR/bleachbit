@@ -631,6 +631,27 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
         self.assertEqual(found[real_file].st_size, 3)
         self.assertTrue(stat.S_ISLNK(found[dir_link].st_mode))
 
+    @common.skipIfWindows
+    def test_children_below_same_device(self):
+        """children_below(same_device=True) stays off other filesystems
+
+        Mounting needs privileges, so top is made to report another device
+        than the directories below it, as a mount point below top would.
+        """
+        top = self.mkdir('children-below-device')
+        top_file = self.write_file(os.path.join(top, 'file'))
+        sub = self.mkdir(os.path.join(top, 'mounted'))
+        sub_file = self.write_file(os.path.join(sub, 'file'))
+
+        self.assertCountEqual(dict(children_below(top, same_device=True)),
+                              [top_file, sub_file])
+        other_dev = unittest.mock.Mock(st_dev=os.stat(top).st_dev + 1)
+        with unittest.mock.patch('os.fstat', return_value=other_dev):
+            self.assertEqual(list(dict(children_below(top, same_device=True))),
+                             [top_file])
+            self.assertCountEqual(dict(children_below(top)),
+                                  [top_file, sub_file])
+
     @common.skipUnlessWindows
     def test_children_in_directory_windows_links(self):
         """Windows: ensure symlinked dirs and junctions are not followed"""

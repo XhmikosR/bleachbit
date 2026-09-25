@@ -494,7 +494,7 @@ def _open_dir_below(top, dirname):
     return fd
 
 
-def children_below(top):
+def children_below(top, same_device=False):
     """Yield (path, lstat result) for each non-directory under top (POSIX)
 
     Unlike children_in_directory(), each subdirectory is opened relative
@@ -503,6 +503,9 @@ def children_below(top):
     it was listed is skipped instead of walked into. Only top may be a
     link. Pass the same top to delete() so the removal cannot follow one
     either.
+
+    With same_device, directories on another filesystem than top, such
+    as a mount point below it, are not walked into.
 
     A descriptor stays open for each directory from top down to the one
     being listed.
@@ -518,6 +521,7 @@ def children_below(top):
     # opened relative to it, are done. top itself is listed through '.'.
     stack = [(top_fd, None, None), (top_fd, os.curdir, top)]
     try:
+        top_dev = os.fstat(top_fd).st_dev
         while stack:
             parent_fd, name, dirpath = stack.pop()
             if name is None:
@@ -543,7 +547,8 @@ def children_below(top):
                         except OSError:
                             continue
                         if stat.S_ISDIR(st.st_mode):
-                            subdirs.append((dir_fd, entry.name, path))
+                            if not same_device or st.st_dev == top_dev:
+                                subdirs.append((dir_fd, entry.name, path))
                         else:
                             yield path, st
             except OSError:

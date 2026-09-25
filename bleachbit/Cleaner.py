@@ -519,8 +519,10 @@ class System(Cleaner):
             dirnames = ['/tmp', '/var/tmp']
             for dirname in dirnames:
                 # Other users can change what is below these, so walk and
-                # delete without following links.
-                for path, st in FileUtilities.children_below(dirname):
+                # delete without following links. Stay off filesystems
+                # mounted below them, which hold more than temporary files.
+                for path, st in FileUtilities.children_below(
+                        dirname, same_device=True):
                     # is_open() resolves the path and rescans /proc, so leave
                     # it until the cheaper tests have had a chance to reject.
                     ok = stat.S_ISREG(st.st_mode) and \
