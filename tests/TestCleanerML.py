@@ -91,6 +91,32 @@ class CleanerMLTestCase(common.BleachbitTestCase):
             [r'C:\Windows\Sysnative', r'C:\Windows\SysWOW64'],
             variables['WindowsSystem'])
 
+    def test_default_vars_program_files(self):
+        """$$ProgramFiles$$ lists each Program Files folder once"""
+        pf = r'C:\Program Files'
+        pf86 = r'C:\Program Files (x86)'
+        tests = (
+            # 32-bit process on 64-bit Windows
+            ({'ProgramFiles': pf86, 'ProgramW6432': pf,
+              'ProgramFiles(x86)': pf86}, [pf86, pf]),
+            # 64-bit process
+            ({'ProgramFiles': pf, 'ProgramW6432': pf,
+              'ProgramFiles(x86)': pf86}, [pf, pf86]),
+            # 32-bit Windows
+            ({'ProgramFiles': pf}, [pf]),
+        )
+        for folders, expected in tests:
+            env = {'WinDir': r'C:\Windows'}
+            for name, value in folders.items():
+                env[name] = value
+                env['Common' + name] = value + r'\Common Files'
+            with mock.patch('bleachbit.CleanerML.IS_WINDOWS', True), \
+                    mock.patch.dict(os.environ, env, clear=True):
+                variables = default_vars()
+            self.assertEqual(expected, variables['ProgramFiles'])
+            self.assertEqual([p + r'\Common Files' for p in expected],
+                             variables['CommonProgramFiles'])
+
     def test_list_cleanerml_files(self):
         """Unit test for list_cleanerml_files()"""
         for pathname in list_cleanerml_files():
