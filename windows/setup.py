@@ -986,10 +986,19 @@ def repack_library(settings):
     # clean unused modules from library.zip
     delete_paths = ['plyer\\platforms\\android',
                     'plyer\\platforms\\ios', 'plyer\\platforms\\linux', 'plyer\\platforms\\macosx']
+    # Frozen into python3XX.dll, which never looks at these copies
+    delete_paths += ['_collections_abc.pyc', 'abc.pyc', 'codecs.pyc',
+                     'genericpath.pyc', 'io.pyc', 'ntpath.pyc', 'os.pyc',
+                     'posixpath.pyc', 'stat.pyc', 'zipimport.pyc',
+                     'importlib\\_bootstrap.pyc',
+                     'importlib\\_bootstrap_external.pyc',
+                     'importlib\\machinery.pyc', 'importlib\\util.pyc']
     for p in delete_paths:
         path = os.path.join('dist', 'library', p)
-        if os.path.exists(path):
+        if os.path.isdir(path):
             shutil.rmtree(path)
+        elif os.path.exists(path):
+            os.remove(path)
 
     # Prune unneeded codecs from the encodings package.
     encodings_keep_list = (
