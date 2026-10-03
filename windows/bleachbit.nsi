@@ -188,6 +188,8 @@ VIFileVersion ${File_VERSION}
 ; Best compression: https://nsis.sourceforge.io/Docs/Chapter1.html#intro-features
 !ifdef Compressor
   SetCompressor /SOLID lzma
+  ; makensis needs about 11 times this in memory
+  SetCompressorDictSize 32
 !endif
 
 
