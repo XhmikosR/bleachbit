@@ -485,10 +485,11 @@ def build_py2exe():
         'bundle_files': 3,  # All files copied to dist directory
         'compressed': 0,     # Stored, so imports skip inflate
         'optimize': 2,       # Extra optimization (like python -OO)
-        'includes': ['gi'],
+        # Imported from C: _strptime by time and datetime, numbers by _decimal
+        'includes': ['gi', '_strptime', 'numbers'],
         'packages': ['charset_normalizer', 'encodings', 'gi', 'gi.overrides', 'plyer.platforms.win.notification'],
         'excludes': ['pyreadline', 'difflib', 'doctest',
-                     'pickle', 'ftplib', 'bleachbit.Unix',
+                     'pickle', 'ftplib', 'bleachbit.Mac', 'bleachbit.Unix',
                      'setuptools', 'tomli', 'wheel', 'backports',
                      'importlib_metadata', 'zipp', 'packaging', 'distutils',
                      'unittest', 'test',
@@ -496,7 +497,18 @@ def build_py2exe():
                      'concurrent.futures.process',
                      'chardet',  # not present now, but defensive
                      'xmlrpc',  # only consumer was multiprocessing.connection
-                     '_pydecimal',  # dead fallback
+                     '_pydecimal', '_pydatetime',  # dead fallbacks
+                     # only imported by main() functions
+                     'argparse', 'getopt', 'py_compile',
+                     # only imported where an ImportError is handled, or
+                     # on paths BleachBit never takes
+                     '_lzma', '_queue', '_uuid', 'asyncio.unix_events',
+                     'lzma', 'plistlib', 'statistics', 'tarfile',
+                     'tracemalloc', 'xml.dom.pulldom', 'xml.sax',
+                     'urllib3.contrib.emscripten', 'urllib3.contrib.pyopenssl',
+                     'urllib3.contrib.socks', 'urllib3.http2.connection',
+                     '_win32sysloader', 'perfmon', 'servicemanager',
+                     'win32evtlog', 'win32evtlogutil',
                      # non-Windows platform modules
                      'psutil._psaix', 'psutil._psbsd', 'psutil._pslinux',
                      'psutil._psosx', 'psutil._pssunos'],
@@ -716,13 +728,8 @@ def delete_unnecessary():
     # Error loading theme icon 'dialog-warning' for stock: Unable to load image-loading module: C:/PythonXY/Lib/site-packages/gtk-2.0/runtime/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.dll: `C:/PythonXY/Lib/site-packages/gtk-2.0/runtime/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.dll': The specified module could not be found.
     # https://bugs.launchpad.net/bleachbit/+bug/1650907
     delete_paths = [
-        r'_queue.pyd',
-        r'_win32sysloader.pyd',
-        r'perfmon.pyd',
-        r'servicemanager.pyd',
         r'share\icons\adwaita\cursors',  # unused, no cursor theme is set
         r'share\icons\highcontrast',
-        r'win32evtlog.pyd',
     ]
     _delete_paths(delete_paths)
 
