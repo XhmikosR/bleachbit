@@ -110,8 +110,10 @@ spelling: $(POTFILE) require-gettext
 
 %.mo: %.po require-gettext
 	@echo "* Generating $@"
-	msgfmt --statistics -o $@ $<
+	msgfmt --statistics $(MSGFMT_FLAGS) -o $@ $<
 
+# Python's gettext never reads the hash table, and libintl can do without
+local: MSGFMT_FLAGS = --no-hash
 local: $(MOFILES)
 	@echo "* Copy locally for running without system installation"
 	for mofile in $(MOFILES); do \
