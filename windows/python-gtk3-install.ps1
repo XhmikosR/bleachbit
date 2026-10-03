@@ -61,7 +61,7 @@ $arch_info = @{
         PyGObjectSha256 = 'ea904642a7c40a615a634ba8cb1a538278c949a04409beae656ea274166913bc'
     }
 }[$Arch]
-$themes_sha256 = '6BD572256773175C0139FCA9AD0D28A0EF23B4E087901D04198FF907FC096624'
+$themes_sha256 = '5b92addd0f7a4a97027e41bc753e84370553f287c32c5b139f8b04b0c30ec15e'
 
 function Assert-FileHash($Path, $Expected) {
     $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash
@@ -184,19 +184,17 @@ if (-not $python_exists) {
     Write-Host "Python is already unpacked; skipping pip bootstrap."
 }
 
-if (-not (Test-Path gtk-themes.zip)) {
+if (-not (Test-Path gtk-themes.7z)) {
     Write-Host "Downloading GTK themes..."
-    #Invoke-WebRequest -Uri "$base_download_url/gtk-themes.zip" -OutFile "gtk-themes.zip"
-    #FIXME: use new themes
-    Invoke-WebRequest -Uri "https://github.com/mkhon/vcpkg/releases/download/gtk3-introspection-v1/gtk-themes.zip" -OutFile "gtk-themes.zip"
+    Invoke-WebRequest -Uri "$base_download_url/gtk-themes.7z" -OutFile "gtk-themes.7z"
 } else {
     Write-Host "GTK themes are already downloaded."
 }
-Assert-FileHash gtk-themes.zip $themes_sha256
+Assert-FileHash gtk-themes.7z $themes_sha256
 
 if (-not (Test-Path "$themes_dir")) {
     Write-Host "Unpacking GTK themes..."
-    Expand-Archive -Path gtk-themes.zip -DestinationPath .
+    Expand-7z gtk-themes.7z
     Copy-Item -Path "gtk-themes\*" -Destination $python_home -Recurse -ErrorAction SilentlyContinue
 } else {
     Write-Host "GTK themes are already unpacked."
