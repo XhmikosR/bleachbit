@@ -795,6 +795,21 @@ def delete_unused_themes():
                       theme_asset_keep_list, label='theme asset')
 
 
+@count_size_improvement
+def delete_unused_typelibs():
+    """Delete typelibs outside the dependency closure of Gtk 3.0"""
+    logger.info('Deleting unused typelibs')
+    # GLibWin32 and GioWin32 must stay: girepository loads them with GLib
+    # and Gio. Importing any of these would only fail in the frozen build.
+    typelibs = ('DBus-1.0', 'DBusGLib-1.0', 'GIRepository-2.0', 'GL-1.0',
+                'GdkPixdata-2.0', 'GdkWin32-3.0', 'PangoCairo-1.0',
+                'PangoFT2-1.0', 'PangoFc-1.0', 'PangoOT-1.0', 'Vulkan-1.0',
+                'fontconfig-2.0', 'libxml2-2.0', 'win32-1.0', 'xfixes-4.0',
+                'xft-2.0', 'xlib-2.0', 'xrandr-1.3')
+    _delete_paths([rf'lib\girepository-1.0\{typelib}.typelib'
+                   for typelib in typelibs])
+
+
 def remove_empty_dirs(root):
     """Remove empty directories"""
     for entry in os.scandir(root):
@@ -1026,6 +1041,7 @@ def shrink(settings):
     delete_unnecessary()
     delete_icons()
     delete_unused_themes()
+    delete_unused_typelibs()
     clean_translations()
     remove_empty_dirs('dist')
     if settings['strip']:
