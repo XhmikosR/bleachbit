@@ -234,7 +234,7 @@ jobs:
         with:
           path: |
             gtk*-${{ matrix.arch }}-windows.7z
-            gtk-themes.zip
+            gtk-themes.7z
             pygobject-*-${{ matrix.wheel }}.whl
             nsis-*-setup.exe
             advancecomp.zip
@@ -402,7 +402,7 @@ jobs:
           # windows-build, whose shrink step strips files in place).
           path: |
             gtk*-${{ matrix.arch }}-windows.7z
-            gtk-themes.zip
+            gtk-themes.7z
             pygobject-*-${{ matrix.wheel }}.whl
             vcpkg_installed
           key: win-test-env-${{ matrix.arch }}-${{ hashFiles('.github/workflows/build_and_test.yaml', 'windows/python-gtk3-deps.lst', 'windows/python-gtk3-install.ps1', 'requirements.txt', 'windows/requirements.txt', 'requirements-test.txt') }}
