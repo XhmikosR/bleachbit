@@ -728,6 +728,7 @@ def delete_unnecessary():
     # Error loading theme icon 'dialog-warning' for stock: Unable to load image-loading module: C:/PythonXY/Lib/site-packages/gtk-2.0/runtime/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.dll: `C:/PythonXY/Lib/site-packages/gtk-2.0/runtime/lib/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-svg.dll': The specified module could not be found.
     # https://bugs.launchpad.net/bleachbit/+bug/1650907
     delete_paths = [
+        r'gi._gi_cairo.pyd',  # needs pycairo, which isn't shipped
         r'share\icons\adwaita\cursors',  # unused, no cursor theme is set
         r'share\icons\highcontrast',
     ]
@@ -993,6 +994,13 @@ def repack_library(settings):
                      'importlib\\_bootstrap.pyc',
                      'importlib\\_bootstrap_external.pyc',
                      'importlib\\machinery.pyc', 'importlib\\util.pyc']
+    # Overrides for typelibs that aren't shipped, the stub of the deleted
+    # gi._gi_cairo.pyd and the charset_normalizer command line
+    delete_paths += ['charset_normalizer\\__main__.pyc',
+                     'charset_normalizer\\cli', 'gi\\_gi_cairo.pyc',
+                     'gi\\overrides\\GIMarshallingTests.pyc',
+                     'gi\\overrides\\GLibUnix.pyc',
+                     'gi\\overrides\\GioUnix.pyc']
     for p in delete_paths:
         path = os.path.join('dist', 'library', p)
         if os.path.isdir(path):
