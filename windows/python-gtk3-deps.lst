@@ -1,6 +1,4 @@
 bin\atk-1.0-0.dll
-bin\brotlicommon.dll
-bin\brotlidec.dll
 bin\cairo-2.dll
 bin\cairo-gobject-2.dll
 bin\croco-0.6-3.dll
