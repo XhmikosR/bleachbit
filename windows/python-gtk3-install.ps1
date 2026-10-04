@@ -43,25 +43,25 @@ $themes_dir = Join-Path $python_home "share\themes"
 $python_exists = Test-Path "$python_home\python.exe"
 # location of this .ps1 script
 $script_dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$base_download_url = "https://github.com/XhmikosR/pygtkwin/releases/download/v2026-10-03-b2/"
+$base_download_url = "https://github.com/XhmikosR/pygtkwin/releases/download/v2026-10-04-b1-shrink/"
 $arch_info = @{
     x86 = @{
         Bits = '32'
         Wheel = 'win32'
         Crt = "$env:SystemRoot\SysWOW64\vcruntime140.dll"
-        GtkSha256 = '555b11d19657c4ab333c59632033eeafc03b14d2a2e38ce70c1973a267aada50'
-        PyGObjectSha256 = '945d1531f8e8ad0a527c1916169684d1daa92317a87a4b90abadfcb568cf96d8'
+        GtkSha256 = 'f4e4f6c6f593be7be22efa2392dbbf540cd97036041054ca281cf12a19d97da7'
+        PyGObjectSha256 = 'e69a1c05aa88204e4f51ae019949eafe985df9bc2c6629c46bb0d14798bc5803'
     }
     x64 = @{
         Bits = '64'
         Wheel = 'win_amd64'
         # Only the x64 redistributable has this DLL
         Crt = "$env:SystemRoot\System32\vcruntime140_1.dll"
-        GtkSha256 = '6deaa2ad5333935a7e0f0276e4ce612f66cac890b7ca215de9776bd1ad896807'
-        PyGObjectSha256 = '43dc9ac5efae15c27c4d56be814d390896eb56cad5c03648caf14d9cd854a2b0'
+        GtkSha256 = 'f11dd7a879caf008b28e4780a953826761c1c153a88448f5bcde66aaefed85a9'
+        PyGObjectSha256 = 'ccd5037ac903bd7e119c929b84289d9d075da7c2a94c0fddcc692de7044503d1'
     }
 }[$Arch]
-$themes_sha256 = '8a9793c161e69a6bbb0f6b65581e7ed2b65acddc8ab365bb09c83a923c22d792'
+$themes_sha256 = '1bb3536387696a658b9cbe64e620d0b8fd023264bc16152f4c3ddfd96f27bf86'
 
 function Assert-FileHash($Path, $Expected) {
     $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash
