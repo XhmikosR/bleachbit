@@ -562,73 +562,77 @@ def _open_dir_below(top, dirname):
     return fd
 
 
+def _open_dir_to_list(top, dirname):
+    """Return a readable dir_fd for dirname, following no link below top"""
+    path_fd = _open_dir_below(top, dirname)
+    try:
+        return os.open(os.curdir, os.O_RDONLY | os.O_DIRECTORY,
+                       dir_fd=path_fd)
+    finally:
+        os.close(path_fd)
+
+
 def children_below(dirname, list_directories=False, same_device=False,
                    top=None):
     """Yield (path, lstat result) under dirname, following no link (POSIX)
 
     Unlike children_in_directory(), this also skips a directory swapped
-    for a link after it was listed. dirname is opened from top, if given,
-    as delete() does, so pass delete() the same top, or else dirname.
+    for a link after it was listed. Each directory is opened from top
+    (default dirname) as delete() does, so pass delete() the same top.
 
     With list_directories, directories come last, deepest first. With
     same_device, mount points below dirname are skipped, bind mounts
-    included. A descriptor stays open per directory level.
+    included.
     """
-    flags = os.O_RDONLY | os.O_DIRECTORY
+    top = dirname if top is None else top
     path_max = _path_max(dirname)
     try:
-        root_fd = _open_dir_below(dirname if top is None else top, dirname)
+        root_fd = _open_dir_below(top, dirname)
     except OSError as e:
         logger.debug('cannot walk %s: %s', dirname, e)
         return
-    pending_dirs = []
-    # (parent_fd, name, path); name None closes parent_fd after its subdirs
-    stack = [(root_fd, None, None), (root_fd, os.curdir, dirname)]
     try:
         root_dev = os.fstat(root_fd).st_dev
-        mounts = _mount_points_below(dirname) if same_device else ()
-        while stack:
-            parent_fd, name, dirpath = stack.pop()
-            if name is None:
-                os.close(parent_fd)
-                continue
-            try:
-                dir_fd = os.open(name, flags | os.O_NOFOLLOW,
-                                 dir_fd=parent_fd)
-            except OSError:
-                # Gone, or no longer a directory
-                continue
-            stack.append((dir_fd, None, None))
-            subdirs = []
-            try:
-                with os.scandir(dir_fd) as scandir_it:
-                    for entry in scandir_it:
-                        path = os.path.join(dirpath, entry.name)
-                        if len(os.fsencode(path)) >= path_max:
-                            # Too long for the path-based calls made on it
-                            continue
-                        try:
-                            st = entry.stat(follow_symlinks=False)
-                        except OSError:
-                            continue
-                        if stat.S_ISDIR(st.st_mode):
-                            if same_device and (st.st_dev != root_dev or
-                                                path in mounts):
-                                continue
-                            if list_directories:
-                                pending_dirs.append((path, st))
-                            subdirs.append((dir_fd, entry.name, path))
-                        elif not (same_device and path in mounts):
-                            yield path, st
-            except OSError:
-                # The directory may disappear or become unreadable mid-iteration
-                pass
-            # Reversed so siblings are visited in the order scandir returned them
-            stack.extend(reversed(subdirs))
     finally:
-        for parent_fd, name, _dirpath in stack:
-            if name is None:
-                os.close(parent_fd)
+        os.close(root_fd)
+    mounts = _mount_points_below(dirname) if same_device else ()
+    pending_dirs = []
+    stack = [dirname]
+    while stack:
+        dirpath = stack.pop()
+        subdirs = []
+        try:
+            dir_fd = _open_dir_to_list(top, dirpath)
+        except OSError:
+            # Gone, or no longer a directory
+            continue
+        try:
+            with os.scandir(dir_fd) as scandir_it:
+                for entry in scandir_it:
+                    path = os.path.join(dirpath, entry.name)
+                    if len(os.fsencode(path)) >= path_max:
+                        # Too long for the path-based calls made on it
+                        continue
+                    try:
+                        st = entry.stat(follow_symlinks=False)
+                    except OSError:
+                        continue
+                    if stat.S_ISDIR(st.st_mode):
+                        if same_device and (st.st_dev != root_dev or
+                                            path in mounts):
+                            continue
+                        if list_directories:
+                            pending_dirs.append((path, st))
+                        subdirs.append(path)
+                    elif not (same_device and path in mounts):
+                        yield path, st
+        except OSError:
+            # The directory may disappear or become unreadable mid-iteration
+            pass
+        finally:
+            os.close(dir_fd)
+        # Reversed so siblings are visited in the order scandir returned them
+        stack.extend(reversed(subdirs))
     pending_dirs.sort(key=lambda item: len(item[0]))
     while pending_dirs:
         yield pending_dirs.pop()

@@ -634,6 +634,33 @@ class FileUtilitiesTestCase(common.BleachbitTestCase, WindowsLinksMixIn):
         self.assertTrue(stat.S_ISLNK(found[dir_link].st_mode))
 
     @common.skipIfWindows
+    def test_children_below_deep(self):
+        """children_below() holds no descriptor per directory level"""
+        top = self.mkdir('children-below-deep')
+        deep = self.mkdir(os.path.join(top, *['d'] * 20))
+        path = self.write_file(os.path.join(deep, 'f'))
+        real_open, real_close = os.open, os.close
+        open_fds = set()
+        peak = 0
+
+        def counting_open(*args, **kwargs):
+            nonlocal peak
+            fd = real_open(*args, **kwargs)
+            open_fds.add(fd)
+            peak = max(peak, len(open_fds))
+            return fd
+
+        def counting_close(fd):
+            open_fds.discard(fd)
+            real_close(fd)
+
+        with unittest.mock.patch('os.open', side_effect=counting_open), \
+                unittest.mock.patch('os.close', side_effect=counting_close):
+            self.assertEqual(list(dict(children_below(top))), [path])
+        self.assertEqual(open_fds, set())
+        self.assertLessEqual(peak, 2)
+
+    @common.skipIfWindows
     def test_mount_points_below(self):
         """_mount_points_below() reads mounts below dirname from mountinfo"""
         top = self.mkdir('mount-points-below')
