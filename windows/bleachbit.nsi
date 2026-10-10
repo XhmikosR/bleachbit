@@ -335,7 +335,12 @@ FunctionEnd
 ; Start BleachBit as the user who ran setup, not the admin that elevated it
 Function RunBleachBit
   HideWindow ; so BleachBit becomes the active window once setup exits
-  !insertmacro UAC_AsUser_ExecShell "open" "$INSTDIR\${prodname}.exe" "" "$INSTDIR" ""
+  ${If} ${UAC_IsInnerInstance}
+    !insertmacro UAC_AsUser_ExecShell "open" "$INSTDIR\${prodname}.exe" "" "$INSTDIR" ""
+  ${Else}
+    ; Setup was started elevated, so there is no user instance to ask
+    ${StdUtils.ExecShellAsUser} $0 "$INSTDIR\${prodname}.exe" "open" ""
+  ${EndIf}
 FunctionEnd
 
 Function .onVerifyInstDir
