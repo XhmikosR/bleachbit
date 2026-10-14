@@ -36,7 +36,7 @@ $themes_dir = Join-Path $python_home "share\themes"
 $python_exists = Test-Path "$python_home\python.exe"
 # location of this .ps1 script
 $script_dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$base_download_url = "https://github.com/bleachbit/pygtkwin/releases/download/v2026-10-13/"
+$base_download_url = "https://github.com/XhmikosR/pygtkwin/releases/download/v2026-10-28-b1-python314/"
 
 function Assert-FileHash($Path, $Expected) {
     $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash
@@ -95,7 +95,7 @@ if (-not (Test-Path $GTK_ARCHIVE_FN)) {
 } else {
     Write-Host "Python and GTK+ are already downloaded."
 }
-Assert-FileHash $GTK_ARCHIVE_FN "d3fd28959ab69ceb185a3f22cfe03bd6f00ab4f7e896621b850e377913a992f3"
+Assert-FileHash $GTK_ARCHIVE_FN "fe0632f9671cd67c3e7d041fc10c1831cfb32755450c381ed2f1268cedf6da3b"
 
 if (-not (Test-Path $python_home\python.exe)) {
     Write-Host "Unpacking Python and GTK+..."
@@ -189,10 +189,10 @@ if (Test-Path "gtk-themes") {
 
 # psutil 7.1.2 stopped providing 32-bit wheels.
 # It needs MSVC++ with the python3.lib.
-Write-Host "Copying python312.lib..."
+Write-Host "Copying python314.lib..."
 New-Item -ItemType Directory -Path "$python_home\libs" -Force
 $pylibdest = "$python_home\libs\python3.lib"
-Copy-Item -Path "$root_dir\lib\python312.lib" -Destination $pylibdest
+Copy-Item -Path "$root_dir\lib\python314.lib" -Destination $pylibdest
 Get-ChildItem -Path $pylibdest | Format-List -Property Name, Length
 
 # Install pip packages
@@ -205,14 +205,14 @@ if (-not $python_exists) {
     }
 }
 
-$PYGOBJECT_FN = "pygobject-3.58.0-cp312-cp312-win32.whl"
+$PYGOBJECT_FN = "pygobject-3.58.0-cp314-cp314-win32.whl"
 if (-not (Test-Path $PYGOBJECT_FN)) {
     Write-Host "Downloading PyGObject..."
     Invoke-WebRequest -Uri "$base_download_url/$PYGOBJECT_FN" -OutFile "$PYGOBJECT_FN"
 } else {
     Write-Host "PyGObject is already downloaded."
 }
-Assert-FileHash $PYGOBJECT_FN "a51a6fa9b1cbe55485d63c08e953538c72007a3798fc2285ca369625a0265f29"
+Assert-FileHash $PYGOBJECT_FN "4405b27683b8482b88185c216146d5931e65cf2686966e4afe8fe34a61a45266"
 
 if (-not $python_exists) {
     Write-Host "pip install $PYGOBJECT_FN..."

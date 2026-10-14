@@ -900,6 +900,7 @@ def repack_library(settings):
     # Prune unneeded codecs from the encodings package.
     encodings_keep_list = (
         '__init__', 'aliases',
+        '_win_cp_codecs',  # imported by encodings on Windows since Python 3.14
         'cp*',  # every Windows ANSI codepage
         'utf_8', 'utf_8_sig',
         'utf_16', 'utf_16_le', 'utf_16_be',
