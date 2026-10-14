@@ -84,7 +84,7 @@ def __valid_random_filename(filename):
         return True
     if filename.endswith((' ', '.')):
         return False
-    # After updating to Python 3.13, use os.path.isreserved() here.
+    # TODO: use ntpath.isreserved() once the minimum Python version is 3.13+
     if filename.rstrip(' .').split('.', 1)[0].upper() in WINDOWS_RESERVED_FILENAMES:
         return False
     if set(filename) & set('<>:"/\\|?*'):
@@ -380,9 +380,10 @@ def wipe_path(pathname, idle=False):
         f = None
         tmp_max_orig = tempfile.TMP_MAX
         if IS_WINDOWS:
-            # On Windows/Python 3.12, tempfile retries PermissionError up to
-            # TMP_MAX (2^31-1) times when os.access() wrongly reports a
-            # read-only mount as writable; bound it so wiping fails fast.
+            # On Windows, Python 3.12 retries PermissionError up to TMP_MAX
+            # (2^31-1) times when os.access() wrongly reports a read-only
+            # mount as writable; bound it so wiping fails fast. Python
+            # 3.13.13 and 3.14.4 cap it at 20 themselves (gh-66305).
             # On POSIX, tempfile raises immediately instead of retrying.
             tempfile.TMP_MAX = min(tmp_max_orig, 20)
         try:
@@ -497,7 +498,8 @@ def wipe_path(pathname, idle=False):
                     # Read-only mount missed by the check above. POSIX always
                     # reports it as EROFS, so EACCES/EPERM there are genuine
                     # permission errors worth raising. On Windows, tempfile
-                    # retries a denied write and finally raises EEXIST.
+                    # retries a denied write and finally raises EEXIST, or
+                    # since gh-66305 the original EACCES/EPERM.
                     logger.warning(
                         'Cannot create a temporary file for wiping; '
                         'the file system may be read-only: %s', e)
