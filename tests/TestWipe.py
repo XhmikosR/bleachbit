@@ -780,7 +780,8 @@ class WipeTestCase(common.BleachbitTestCase):
         writable file system, so the real OS errors from creating a file on
         read-only media exercise the fallback path: on Windows, tempfile
         retries PermissionError up to the bounded TMP_MAX and then raises
-        EEXIST; on POSIX, os.open fails immediately with EROFS.
+        EEXIST, or since gh-66305 the PermissionError; on POSIX, os.open
+        fails immediately with EROFS.
         """
         if not (mounts := common.cdrom_mountpoints()):
             self.skipTest('no CD-ROM drive present')
@@ -803,8 +804,9 @@ class WipeTestCase(common.BleachbitTestCase):
 
         On POSIX a read-only mount raises EROFS. On Windows, where a
         read-only mount is not always detected, tempfile turns EACCES or
-        EPERM into EEXIST after its bounded retries. The real errors are
-        exercised by test_wipe_path_readonly_drive_detection_missed().
+        EPERM into EEXIST after its bounded retries, or re-raises them
+        since gh-66305. The real errors are exercised by
+        test_wipe_path_readonly_drive_detection_missed().
         """
         denied = (errno.EACCES, errno.EPERM, errno.EEXIST) \
             if bleachbit.IS_WINDOWS else (errno.EROFS,)
