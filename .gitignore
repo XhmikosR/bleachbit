@@ -32,6 +32,7 @@ build/
 dist/
 BleachBit-Portable/
 BleachBit-*-portable.zip
+BleachBit-*-portable*.7z
 upx/
 windows/vcpkg_installed/
 windows/BleachBit*.exe

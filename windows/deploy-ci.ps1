@@ -23,7 +23,7 @@ $tag = ''
 if ($env:GITHUB_REF_TYPE -eq 'tag') { $tag = $ref } else { $branch = $ref }
 $dest = "s3://$env:AWS_BUCKET_NAME/"
 "## Windows CI builds`n" >> $env:GITHUB_STEP_SUMMARY
-Get-ChildItem BleachBit-*-setup.exe, BleachBit-*-setup-English.exe, BleachBit-*-portable.zip -File |
+Get-ChildItem BleachBit-*-setup.exe, BleachBit-*-setup-English.exe, BleachBit-*-portable.7z -File |
   ForEach-Object {
     $file = $_.FullName
     $name = $_.Name
@@ -32,7 +32,7 @@ Get-ChildItem BleachBit-*-setup.exe, BleachBit-*-setup-English.exe, BleachBit-*-
     $md5    = (Get-FileHash -Algorithm MD5    $file).Hash.ToLower()
     $artifactType = if ($name -like '*-setup-English.exe') { 'installer-english' } `
                     elseif ($name -like '*-setup.exe') { 'installer' } `
-                    elseif ($name -like '*-portable.zip') { 'portable' } `
+                    elseif ($name -like '*-portable.7z') { 'portable' } `
                     else { 'unknown' }
     $arch = if ($name -like 'BleachBit-*-x64-*') { 'x64' } else { 'x86' }
     $meta = "ref=$ref,run=$run,run_id=$runId,attempt=$attempt,event=$event,actor=$actor,version=$ver,version3=$ver3,commit=$sha,branch=$branch,tag=$tag,sha256=$sha256,sha1=$sha1,md5=$md5,size=$($_.Length),artifact_type=$artifactType,arch=$arch,frontend=gtk"
