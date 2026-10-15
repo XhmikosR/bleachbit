@@ -241,7 +241,6 @@ jobs:
             gtk-themes.7z
             pygobject-*-${{ matrix.wheel }}.whl
             nsis-*-setup.exe
-            advancecomp.zip
           key: win-build-deps-${{ matrix.arch }}-${{ hashFiles('.github/workflows/build_and_test.yaml', 'windows/python-gtk3-deps.lst', 'windows/python-gtk3-install.ps1') }}
 
       - name: Cache pip packages
@@ -277,21 +276,6 @@ jobs:
           }
           Start-Process -FilePath .\nsis-3.13-setup.exe -ArgumentList '/S' -Wait
 
-      - name: Install AdvanceCOMP (advzip)
-        # This is used in the NSIS build setup for releases (tags).
-        if: github.ref_type == 'tag'
-        shell: pwsh
-        run: |
-          if (-not (Test-Path advancecomp.zip)) {
-            Invoke-WebRequest -Uri "https://github.com/amadvance/advancecomp/releases/download/v2.6/advancecomp-2.6-windows-x64.zip" -OutFile advancecomp.zip
-          }
-          $hash = (Get-FileHash advancecomp.zip -Algorithm SHA256).Hash
-          if ($hash -ne '39478E2810D2E6FECEA321D11A8E8AAD678E9E52F83C684D85DCB70342607704') {
-            throw "SHA256 mismatch=$hash"
-          }
-          7z x advancecomp.zip -oadvancecomp -y
-          Get-ChildItem .\advancecomp\
-
       - name: Generate Revision.py
         uses: $/.github/actions/generate-revision
 
@@ -314,8 +298,8 @@ jobs:
         # the cost of GHA minutes and storage.
         # PR builds pass 'fast' (skips the library.zip repack)
         # since windows-deploy never ships PR-triggered artifacts.
-        # Tagged builds pass 'max-effort' (enables advzip zopfli recompression
-        # and the English-only installer).
+        # Tagged builds pass 'max-effort' (enables 7z -mx=9 for the portable
+        # build and the English-only installer).
         env:
           SETUP_ARGS: ${{ github.event_name == 'pull_request' && 'fast' || (github.ref_type == 'tag' && 'max-effort' || '') }}
         run: |
@@ -336,11 +320,11 @@ jobs:
         with:
           name: windows-build${{ matrix.suffix }}-${{ steps.revision.outputs.version }}
           if-no-files-found: error
-          # The installer and the portable zip are already compressed
+          # The installer and the portable archive are already compressed
           compression-level: 0
           path: |
             BleachBit-*-setup.exe
-            BleachBit-*-portable.zip
+            BleachBit-*-portable.7z
 
       - name: Upload build artifacts (English installer)
         if: github.ref_type == 'tag'
@@ -540,7 +524,7 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag') { $tag = $ref } else { $branch = $ref }
           $dest = "s3://${{ secrets.AWS_BUCKET_NAME }}/"
           "## Windows CI builds`n" >> $env:GITHUB_STEP_SUMMARY
-          Get-ChildItem BleachBit-*-setup.exe, BleachBit-*-setup-English.exe, BleachBit-*-portable.zip -File |
+          Get-ChildItem BleachBit-*-setup.exe, BleachBit-*-setup-English.exe, BleachBit-*-portable.7z -File |
             ForEach-Object {
               $file = $_.FullName
               $name = $_.Name
@@ -549,7 +533,7 @@ jobs:
               $md5    = (Get-FileHash -Algorithm MD5    $file).Hash.ToLower()
               $artifactType = if ($name -like '*-setup-English.exe') { 'installer-english' } `
                               elseif ($name -like '*-setup.exe') { 'installer' } `
-                              elseif ($name -like '*-portable.zip') { 'portable' } `
+                              elseif ($name -like '*-portable.7z') { 'portable' } `
                               else { 'unknown' }
               $arch = if ($name -like 'BleachBit-*-x64-*') { 'x64' } else { 'x86' }
               $meta = "ref=$ref,run=$run,run_id=$runId,attempt=$attempt,event=$event,actor=$actor,version=$ver,version3=$ver3,commit=$sha,branch=$branch,tag=$tag,sha256=$sha256,sha1=$sha1,md5=$md5,size=$($_.Length),artifact_type=$artifactType,arch=$arch,frontend=gtk"
