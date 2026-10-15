@@ -78,7 +78,6 @@ if not os.path.exists(NSIS_EXE) and os.path.exists(NSIS_ALT_EXE):
 SZ_EXE = 'C:\\Program Files\\7-Zip\\7z.exe'
 UPX_EXE = shutil.which('upx') or (ROOT_DIR + '\\upx\\upx.exe')
 UPX_OPTS = '--best --nrv2e'
-ADVZIP_EXE = shutil.which('advzip') or (ROOT_DIR + '\\advancecomp\\advzip.exe')
 # File name tag for each supported sysconfig.get_platform()
 ARCH_TAGS = {'win32': '', 'win-amd64': '-x64'}
 
@@ -95,7 +94,7 @@ def get_build_settings():
                    * set maximum compression for .zip and NSIS
       max-effort - enable Deadpool mode for release builds
                    * build English-only installer
-                   * recompress .zip with advzip
+                   * set maximum compression for the portable .7z
     """
     arg = 'regular'
     for a in sys.argv[1:]:
@@ -120,35 +119,17 @@ def get_build_settings():
         'upx': upx_enabled,  # compress executables
         'upx_tag': '-upx' if upx_enabled else '',  # filename tag for UPX builds
         'arch_tag': ARCH_TAGS[sysconfig.get_platform()],  # filename tag (x64)
-        # recompress zips with advzip
-        'advzip': is_max_effort and bool(os.path.exists(ADVZIP_EXE)),
+        # 5 is 7z's default; releases get the smallest portable archive
+        'sz_level': 9 if is_max_effort else 5,
         'recompress_lib': not is_fast,  # prune and repack library.zip
     }
 
 
-def recompress_with_advzip(zip_path):
-    """Recompress a .zip archive with advzip"""
-    assert_exist(zip_path)
-    logger.info('Recompressing %s with advzip -4 (zopfli)', zip_path)
-    file_size_old = os.path.getsize(zip_path)
-    t0 = time.time()
-    cmd = [ADVZIP_EXE, '--recompress', '--shrink-insane', zip_path]
-    run_cmd(cmd)
-    t1 = time.time()
-    file_size_new = os.path.getsize(zip_path)
-    file_size_diff = file_size_old - file_size_new
-    logger.info('advzip recompression of %s reduced size by %s from %s to %s in %.1f s',
-                zip_path, f'{file_size_diff:,}', f'{file_size_old:,}', f'{file_size_new:,}', t1 - t0)
-
-
-def archive(infile, outfile, settings, use_advzip=False, store=False):
+def archive(infile, outfile, settings, store=False):
     """Create an archive from a file
 
     This uses 7-Zip to create a .zip archive with the request
     compression stings.
-
-    If use_advzip is enabled, then advzip recompresses the .zip
-    file, which is not needed for the zipped installer.
 
     If store is enabled, the files are not compressed.
     """
@@ -170,8 +151,6 @@ def archive(infile, outfile, settings, use_advzip=False, store=False):
     cmd = [SZ_EXE, 'a'] + sz_opts + [outfile, infile]
     run_7z(cmd)
     assert_exist(outfile)
-    if use_advzip and settings['advzip']:
-        recompress_with_advzip(outfile)
 
 
 def recursive_glob(rootdir, patterns):
@@ -1068,10 +1047,12 @@ def package_portable(settings):
         text_file.write("[Portable]")
     keep_font_cache_in_portable('BleachBit-Portable')
 
-    archive('BleachBit-Portable',
-            f'BleachBit-{get_version()}{settings["arch_tag"]}-portable'
-            f'{settings["upx_tag"]}.zip',
-            settings, use_advzip=True)
+    outfile = (f'BleachBit-{get_version()}{settings["arch_tag"]}-portable'
+               f'{settings["upx_tag"]}.7z')
+    delete_file(outfile, warn_if_exists=True)
+    run_7z([SZ_EXE, 'a', '-t7z', '-m0=LZMA2', f'-mx={settings["sz_level"]}',
+            '-mmt=on', '-bso0', '-bsp0', outfile, 'BleachBit-Portable'])
+    assert_exist(outfile)
 
 
 def nsis(opts, exe_name, nsi_path, settings):
@@ -1161,8 +1142,8 @@ def main():
     logger.info('BleachBit version %s', get_version())
     environment_check()
     settings = get_build_settings()
-    logger.info('Build preset: %s (UPX: %s, AdvZip: %s)',
-                settings['preset'], settings['upx'], settings['advzip'])
+    logger.info('Build preset: %s (UPX: %s, 7z level: %d)',
+                settings['preset'], settings['upx'], settings['sz_level'])
     build()
     shrink(settings)
     package_portable(settings)
@@ -1170,7 +1151,8 @@ def main():
     # Clearly show the sizes of the files that end users download because the
     # goal is to minimize them.
     subprocess.run(
-        ['cmd', '/c', 'dir', '*.zip', r'windows\*.exe', r'windows\*.zip'],
+        ['cmd', '/c', 'dir', 'BleachBit-*.7z', r'windows\*.exe',
+         r'windows\*.zip'],
         check=False)
     duration = time.time() - start_time
     minutes = int(duration // 60)
