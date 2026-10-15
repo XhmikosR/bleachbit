@@ -75,8 +75,8 @@ clean:
 	@rm -vf {.,bleachbit,tests,windows,bleachbit/markovify}/*{pyc,pyo,~} # files
 	@rm -vrf {.,bleachbit,tests,windows,bleachbit/markovify}/__pycache__ # directories
 	@rm -vrf build dist # created by py2exe
-	@rm -rf BleachBit-Portable # created by windows/setup.bat
-	@rm -rf BleachBit-*-portable*.zip
+	@rm -rf BleachBit-Portable # created by windows/setup.py
+	@rm -rf BleachBit-*-portable*.7z
 	@rm -vf MANIFEST # created by setup.py
 	$(MAKE) -C po clean
 	@rm -vrf locale
