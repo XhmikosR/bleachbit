@@ -90,7 +90,6 @@ jobs:
             gtk-themes.7z
             pygobject-*-${{ matrix.wheel }}.whl
             nsis-*-setup.exe
-            advancecomp.zip
           key: win-build-deps-${{ matrix.arch }}-${{ hashFiles('.github/workflows/build_and_test.yaml', 'windows/install-build-tools.ps1', 'windows/python-gtk3-deps.lst', 'windows/python-gtk3-install.ps1') }}
 
       - name: Cache pip packages
@@ -114,10 +113,9 @@ jobs:
         shell: pwsh
         run: .\windows\python-gtk3-install.ps1 -Arch $env:ARCH
 
-      - name: Install NSIS and AdvanceCOMP
-        # AdvanceCOMP (advzip) is used in the NSIS build setup for releases (tags).
+      - name: Install NSIS
         shell: pwsh
-        run: .\windows\install-build-tools.ps1 -AdvanceComp:($env:GITHUB_REF_TYPE -eq 'tag')
+        run: .\windows\install-build-tools.ps1
 
       - name: Generate Revision.py
         uses: $/.github/actions/generate-revision
@@ -141,8 +139,8 @@ jobs:
         # the cost of GHA minutes and storage.
         # PR builds pass 'fast' (skips the library.zip repack)
         # since windows-deploy never ships PR-triggered artifacts.
-        # Tagged builds pass 'max-effort' (enables advzip zopfli recompression
-        # and the English-only installer).
+        # Tagged builds pass 'max-effort' (enables 7z -mx=9 for the portable
+        # build and the English-only installer).
         env:
           SETUP_ARGS: ${{ github.event_name == 'pull_request' && 'fast' || (github.ref_type == 'tag' && 'max-effort' || '') }}
         run: |
@@ -163,11 +161,11 @@ jobs:
         with:
           name: windows-build${{ matrix.suffix }}-${{ steps.revision.outputs.version }}
           if-no-files-found: error
-          # The installer and the portable zip are already compressed
+          # The installer and the portable archive are already compressed
           compression-level: 0
           path: |
             BleachBit-*-setup.exe
-            BleachBit-*-portable.zip
+            BleachBit-*-portable.7z
 
       - name: Upload build artifacts (English installer)
         if: github.ref_type == 'tag'
