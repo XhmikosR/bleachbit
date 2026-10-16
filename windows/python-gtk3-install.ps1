@@ -43,25 +43,25 @@ $themes_dir = Join-Path $python_home "share\themes"
 $python_exists = Test-Path "$python_home\python.exe"
 # location of this .ps1 script
 $script_dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$base_download_url = "https://github.com/XhmikosR/pygtkwin/releases/download/v2026-10-12-b1-shrink/"
+$base_download_url = "https://github.com/XhmikosR/pygtkwin/releases/download/v2026-10-14-b1-python314/"
 $arch_info = @{
     x86 = @{
         Bits = '32'
         Wheel = 'win32'
         Crt = "$env:SystemRoot\SysWOW64\vcruntime140.dll"
-        GtkSha256 = '03639169091623d58aa5d5612ffd8d6c1075d30fdb24f29f356e1ceb143681e4'
-        PyGObjectSha256 = 'b256c34d0e495764b482be41945f3502eb8301f2c02cab14ffdde1a4f797c2e3'
+        GtkSha256 = '66cce1923ed6546913a032ecb890b4a79c33d2c6232df0d5e34f9d0430812d24'
+        PyGObjectSha256 = '507de6121376c820494de30b42b6f444a4eef22ba20507e6fc23cefa6e58c8cc'
     }
     x64 = @{
         Bits = '64'
         Wheel = 'win_amd64'
         # Only the x64 redistributable has this DLL
         Crt = "$env:SystemRoot\System32\vcruntime140_1.dll"
-        GtkSha256 = '97d2f2efe4d8779fc973f181078875de655f780467f7994c5b07bc70edf2b085'
-        PyGObjectSha256 = 'dcfdaf39887a9ff69abd6d1b74a34c9d9d756e839d433a6c0442d2869c73e9ab'
+        GtkSha256 = '7709062829a69faa045129b77c48c404f62b868c49c31a06474704802ae65317'
+        PyGObjectSha256 = '9c277913a2b3de45198986b977fe52fa0f6cf308d5c9e8e838318e4e3fdb9684'
     }
 }[$Arch]
-$themes_sha256 = '8b3d0db08dbc94986d7f5480e18c575b93d26aa0419b7de2e37e29c3963a32d7'
+$themes_sha256 = '22040805f6bf8cc15058a8c36ffbdadd1598e6e267dbc257393ee79471129d64'
 
 function Assert-FileHash($Path, $Expected) {
     $actual = (Get-FileHash -Path $Path -Algorithm SHA256).Hash
@@ -212,10 +212,10 @@ if (Test-Path "gtk-themes") {
 
 # psutil 7.1.2 stopped providing 32-bit wheels.
 # It needs MSVC++ with the python3.lib.
-Write-Host "Copying python312.lib..."
+Write-Host "Copying python314.lib..."
 New-Item -ItemType Directory -Path "$python_home\libs" -Force
 $pylibdest = "$python_home\libs\python3.lib"
-Copy-Item -Path "$root_dir\lib\python312.lib" -Destination $pylibdest
+Copy-Item -Path "$root_dir\lib\python314.lib" -Destination $pylibdest
 Get-ChildItem -Path $pylibdest | Format-List -Property Name, Length
 
 # Install pip packages
@@ -228,7 +228,7 @@ if (-not $python_exists) {
     }
 }
 
-$PYGOBJECT_FN = "pygobject-3.58.0-cp312-cp312-$($arch_info.Wheel).whl"
+$PYGOBJECT_FN = "pygobject-3.58.0-cp314-cp314-$($arch_info.Wheel).whl"
 if (-not (Test-Path $PYGOBJECT_FN)) {
     Write-Host "Downloading PyGObject..."
     Invoke-WebRequest -Uri "$base_download_url/$PYGOBJECT_FN" -OutFile "$PYGOBJECT_FN"
