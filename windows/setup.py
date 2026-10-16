@@ -491,6 +491,8 @@ def build_py2exe():
                      'unittest', 'test',
                      'multiprocessing',
                      'concurrent.futures.process',
+                     'concurrent.futures.interpreter',
+                     'concurrent.interpreters',
                      'chardet',  # not present now, but defensive
                      'xmlrpc',  # only consumer was multiprocessing.connection
                      '_pydecimal', '_pydatetime',  # dead fallbacks
@@ -501,11 +503,13 @@ def build_py2exe():
                      '_lzma', '_queue', '_uuid', 'asyncio.unix_events',
                      'lzma', 'plistlib', 'statistics', 'tarfile',
                      'tracemalloc', 'xml.dom.pulldom', 'xml.sax',
+                     '_zstd', 'compression.zstd',
                      'urllib3.contrib.emscripten', 'urllib3.contrib.pyopenssl',
                      'urllib3.contrib.socks', 'urllib3.http2.connection',
                      '_win32sysloader', 'perfmon', 'servicemanager',
                      'win32evtlog', 'win32evtlogutil',
                      # non-Windows platform modules
+                     '_aix_support', '_ios_support', '_osx_support',
                      'psutil._psaix', 'psutil._psbsd', 'psutil._pslinux',
                      'psutil._psosx', 'psutil._pssunos'],
     }
