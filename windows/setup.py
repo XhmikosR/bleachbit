@@ -44,6 +44,7 @@ from setup import supported_languages
 from bleachbit.CleanerML import CleanerML
 from bleachbit.FileUtilities import children_in_directory
 from bleachbit.SystemInformation import get_version
+from windows.MoUtilities import shrink_mo, unused_msgids
 from windows.NsisUtilities import write_nsis_expressions_to_files
 
 SetupEncoding = sys.stdout.encoding
@@ -78,6 +79,10 @@ if not os.path.exists(NSIS_EXE) and os.path.exists(NSIS_ALT_EXE):
 SZ_EXE = 'C:\\Program Files\\7-Zip\\7z.exe'
 UPX_EXE = shutil.which('upx') or (ROOT_DIR + '\\upx\\upx.exe')
 UPX_OPTS = '--best --nrv2e'
+# bleachbit.pot sources whose strings the Windows build never translates
+WINDOWS_UNUSED_SOURCES = ('NsisMultiUserLang.nsh',
+                          'org.bleachbit.BleachBit.desktop',
+                          'org.bleachbit.BleachBit.metainfo.xml')
 # File name tag for each supported sysconfig.get_platform()
 ARCH_TAGS = {'win32': '', 'win-amd64': '-x64'}
 
@@ -571,6 +576,27 @@ def clean_dist_locale():
     os.rmdir(tmpd)
 
 
+@count_size_improvement
+def shrink_mo_files():
+    """Drop the translations Windows never looks up from dist/share/locale"""
+    logger.info('Shrinking .mo files')
+    unused = unused_msgids(os.path.join(ROOT_DIR, 'po', 'bleachbit.pot'),
+                           WINDOWS_UNUSED_SOURCES)
+    basedir = os.path.normpath('dist/share/locale')
+    for mo_path in sorted(glob.glob(os.path.join(basedir, '*', 'LC_MESSAGES', '*.mo'))):
+        lang = os.path.basename(os.path.dirname(os.path.dirname(mo_path)))
+        mo_name = os.path.basename(mo_path)
+        # gettext falls back from pt_BR to pt, so an entry dropped from
+        # pt_BR could pick up a different pt translation
+        parent = re.split(r'[_@.]', lang)[0]
+        has_parent = parent != lang and os.path.exists(
+            os.path.join(basedir, parent, 'LC_MESSAGES', mo_name))
+        drop = unused if mo_name == 'bleachbit.mo' else frozenset()
+        if not shrink_mo(mo_path, drop, keep_identical=has_parent):
+            logger.warning(
+                'Unsupported .mo revision, not shrinking %s', mo_path)
+
+
 def build():
     """Build the application"""
     logger.info('Deleting directories build and dist')
@@ -991,6 +1017,7 @@ def shrink(settings):
     if settings['upx']:
         upx()
     clean_dist_locale()
+    shrink_mo_files()
 
     delete_linux_only()
 
