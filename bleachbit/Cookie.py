@@ -12,6 +12,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import time
 
 import bleachbit
@@ -34,7 +35,8 @@ def _keep_host_func(keep_list):
     Doing this in SQL takes a term per domain, and a long keep list then
     exceeds SQLite's expression depth limit.
     """
-    domains = {str(d).lstrip('.').lower() for d in keep_list}
+    # Cookies have no port, so localhost:9898 keeps all of localhost
+    domains = {_split_port(str(d).lstrip('.').lower())[0] for d in keep_list}
 
     def keep_host(host):
         if not isinstance(host, str):
@@ -169,6 +171,75 @@ def list_cookies(path):
         cursor = conn.cursor()
         cursor.execute(f"SELECT distinct {host_column} FROM {table_name}")
         return cursor.fetchall()
+
+
+_CHROMIUM_ORIGIN_RE = re.compile(
+    r'^(https?)_(?P<host>[^_]+)_(?P<port>\d+)(\.indexeddb\.(leveldb|blob))?$')
+_HOST_RE = re.compile(r'^[a-z0-9-]+(\.[a-z0-9-]+)*$')
+# Partitioned, first-party isolated and private browsing storage is never
+# kept: it belongs to a third party or should not have outlived the session.
+_KEEPABLE_ORIGIN_ATTRIBUTES = ('userContextId',)
+
+
+def _split_port(site):
+    """Split 'host:port' into (host, port); port is '' when absent"""
+    host, sep, port = site.rpartition(':')
+    if sep and port.isdigit():
+        return host, port
+    return site, ''
+
+
+def storage_origin(path):
+    """Return the site of a per-origin storage folder, or None
+
+    The site is the host, with ':' and the port when the origin has one,
+    such as localhost:9898. Firefox names the folder after the origin:
+    the scheme, '+++', the host, and '+' with the port, and a '^' starts
+    origin attributes such as ^userContextId=2. Chromium names IndexedDB
+    folders scheme_host_port.indexeddb.leveldb, with port 0 for the
+    default port.
+
+    None means the folder cannot be kept: it is not a web origin, the
+    name is not understood, or it has an attribute such as partitionKey.
+    """
+    name = os.path.basename(os.path.normpath(path))
+    origin, _sep, attributes = name.partition('^')
+    scheme, sep, rest = origin.partition('+++')
+    if sep and scheme in ('http', 'https'):
+        for attribute in filter(None, attributes.split('&')):
+            if attribute.partition('=')[0] not in _KEEPABLE_ORIGIN_ATTRIBUTES:
+                return None
+        host, _sep, port = rest.partition('+')
+    else:
+        match = _CHROMIUM_ORIGIN_RE.match(name)
+        if not match:
+            return None
+        host, port = match.group('host'), match.group('port')
+        if port == '0':
+            port = ''
+    host = host.lower()
+    if not _HOST_RE.match(host) or (port and not port.isdigit()):
+        return None
+    return f'{host}:{port}' if port else host
+
+
+def origin_in_keep_list(origin, keep_list):
+    """Return whether the origin's host is in the keep list
+
+    Unlike a cookie, storage belongs to one origin and no subdomain can
+    read it, so only the exact host matches: keeping example.com does not
+    keep mail.example.com. A keep list entry with a port, such as
+    localhost:9898, keeps only that port; an entry without one keeps
+    every port.
+    """
+    host, port = _split_port(origin.strip().lstrip('.').lower())
+    for entry in keep_list:
+        domain, keep_port = _split_port(str(entry).strip().lstrip('.').lower())
+        if keep_port and keep_port != port:
+            continue
+        if domain and host == domain:
+            return True
+    return False
 
 
 def load_keep_list():
@@ -355,26 +426,29 @@ def delete_cookies(path, keep_list, really_delete=False):
 
 
 def list_unique_cookies():
-    """Return unique cookie hostnames across all cleaners with cookie actions.
+    """Return unique hostnames across all cleaners with cookie actions.
 
     Iterates through every registered cleaner, locates actions whose
     ``command="cookie"`` and aggregates the existing cookie database files
-    they target.  Each database is opened using :func:`list_cookies`, and the
-    distinct host entries are returned as a sorted list.
+    they target.  Each database is opened using :func:`list_cookies`.
+    Actions whose ``command="site.data"`` contribute the hosts of their
+    per-origin storage folders.  The distinct hosts are returned sorted.
 
     Returns:
-        list[str]: Sorted, de-duplicated list of cookie host strings.
+        list[str]: Sorted, de-duplicated list of host strings.
     """
 
     import sqlite3
     cookie_files = set()
+    unique_hosts = set()
     # Import backends here to avoid a circular import.
     from bleachbit.Cleaner import backends as cleaner_backends
     # This runs in a thread while the GUI may clear and refill backends.
     for cleaner in list(cleaner_backends.values()):
         actions = getattr(cleaner, 'actions', ())
         for option_id, action in actions:
-            if getattr(action, 'action_key', None) != 'cookie':
+            action_key = getattr(action, 'action_key', None)
+            if action_key not in ('cookie', 'site.data'):
                 continue
             try:
                 paths = list(action.get_paths())
@@ -383,10 +457,15 @@ def list_unique_cookies():
                              cleaner.get_id(), option_id, exc)
                 continue
             for path in paths:
-                if path and os.path.isfile(path):
+                if not path:
+                    continue
+                if action_key == 'site.data':
+                    origin = storage_origin(path)
+                    if origin and os.path.isdir(path):
+                        unique_hosts.add(origin)
+                elif os.path.isfile(path):
                     cookie_files.add(path)
 
-    unique_hosts = set()
     for path in cookie_files:
         try:
             rows = list_cookies(path)

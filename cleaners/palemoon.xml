@@ -86,9 +86,8 @@ sessionCheckpoints.json
   <option id="site_data">
     <label>Site data</label>
     <description>Delete LocalStorage, IndexedDB, and other data stored by websites</description>
-    <action command="delete" search="walk.all" path="$$profile$$/storage/default/http*"/>
     <action command="delete" search="walk.all" path="$$profile$$/storage/temporary/http*"/>
-    <action command="delete" search="glob" path="$$profile$$/storage/default/http*"/>
+    <action command="site.data" search="glob" path="$$profile$$/storage/default/http*"/>
     <action command="delete" search="file" path="$$profile$$/webappsstore.sqlite"/>
     <action command="delete" search="file" path="$$profile$$/webappsstore.sqlite-shm"/>
     <action command="delete" search="file" path="$$profile$$/webappsstore.sqlite-wal"/>

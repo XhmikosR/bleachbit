@@ -91,21 +91,28 @@ class ActionTestCase(common.BleachbitTestCase):
     _TEST_PROCESS_CMD = 'cmd.exe /c dir' if IS_WINDOWS else 'dir'
     _TEST_PROCESS_SIMPLE = '<action command="process" cmd={cmd} />'
 
-    def _test_action_str(self, action_str, expect_exists=True):
-        """Parse <action> and test it"""
+    def _action_provider(self, action_str):
+        """Parse <action> and return its provider"""
         try:
             dom = parseString(action_str)
         except xml.parsers.expat.ExpatError as e:
             self.fail(f"parse error: {action_str}: {e}")
         action_node = dom.childNodes[0]
         command = action_node.getAttribute('command')
-        filename = action_node.getAttribute('path')
-        search = action_node.getAttribute('search')
         provider = None
         for actionplugin in ActionProvider.plugins:
             if actionplugin.action_key == command:
                 provider = actionplugin(action_node)
         self.assertNotEqual(provider, None)
+        return provider
+
+    def _test_action_str(self, action_str, expect_exists=True):
+        """Parse <action> and test it"""
+        provider = self._action_provider(action_str)
+        action_node = parseString(action_str).childNodes[0]
+        command = action_node.getAttribute('command')
+        filename = action_node.getAttribute('path')
+        search = action_node.getAttribute('search')
         for cmd in provider.get_commands():
             self.assertIsInstance(
                 cmd, (Command.Delete, Command.Ini, Command.Json, Command.Function))
@@ -304,6 +311,146 @@ class ActionTestCase(common.BleachbitTestCase):
             self._test_action_str(action_str)
 
         json_helper(self, execute_json)
+
+    def test_site_data(self):
+        """Unit test for the site.data action with a keep list"""
+        storage = os.path.join(self.mkdtemp(), 'storage', 'default')
+        kept = os.path.join(storage, 'http+++localhost+9898')
+        kept_container = os.path.join(
+            storage, 'https+++localhost^userContextId=2')
+        gone = os.path.join(storage, 'https+++example.com')
+        for origin in (kept, kept_container, gone):
+            os.makedirs(os.path.join(origin, 'ls'))
+            self.write_file(os.path.join(origin, 'ls', 'data.sqlite'))
+            self.write_file(os.path.join(origin, '.metadata-v2'))
+        self._test_site_data(storage, kept, kept_container, gone)
+
+    def test_site_data_exact_host(self):
+        """Keeping a site keeps its own storage, not a subdomain's or a partition's"""
+        storage = os.path.join(self.mkdtemp(), 'storage', 'default')
+        kept = os.path.join(storage, 'https+++google.com')
+        gone = [os.path.join(storage, name) for name in (
+            'https+++mail.google.com',
+            'https+++google.com^partitionKey=%28https%2Cnews.example%29',
+            'https+++google.com^privateBrowsingId=1')]
+        for origin in [kept] + gone:
+            os.makedirs(os.path.join(origin, 'ls'))
+            self.write_file(os.path.join(origin, 'ls', 'data.sqlite'))
+        action_str = (
+            f'<action command="site.data" search="glob" path="{storage}/http*"/>')
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list',
+                        return_value={'google.com'}):
+            cmds = list(provider.get_commands())
+        self.assertEqual([cmd.path for cmd in cmds
+                          if isinstance(cmd, Command.Keep)], [kept])
+        self._execute_site_data(cmds)
+        self.assertExists(os.path.join(kept, 'ls', 'data.sqlite'))
+        for origin in gone:
+            self.assertNotExists(origin)
+
+    @common.skipIfWindows
+    def test_site_data_link(self):
+        """A site folder that is a symlink is deleted without following it"""
+        base = self.mkdtemp()
+        storage = os.path.join(base, 'storage', 'default')
+        os.makedirs(storage)
+        target = os.path.join(base, 'elsewhere')
+        os.makedirs(target)
+        target_file = self.write_file(os.path.join(target, 'data.sqlite'))
+        link = os.path.join(storage, 'https+++example.com')
+        os.symlink(target, link)
+        action_str = (
+            f'<action command="site.data" search="glob" path="{storage}/http*"/>')
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list', return_value=set()):
+            cmds = list(provider.get_commands())
+        self.assertEqual([cmd.path for cmd in cmds], [link])
+        self._execute_site_data(cmds)
+        self.assertFalse(os.path.lexists(link))
+        self.assertExists(target_file)
+
+    def test_site_data_keep_list_unreadable(self):
+        """An unreadable keep list leaves site data alone and fails"""
+        storage = os.path.join(self.mkdtemp(), 'storage', 'default')
+        origin = os.path.join(storage, 'https+++example.com')
+        os.makedirs(origin)
+        action_str = (
+            f'<action command="site.data" search="glob" path="{storage}/http*"/>')
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list',
+                        side_effect=ValueError('expected a list, got str')):
+            cmds = list(provider.get_commands())
+        self.assertEqual(len(cmds), 1)
+        self.assertIsInstance(cmds[0], Command.Fail)
+        for really_delete in (False, True):
+            with self.assertRaises(RuntimeError):
+                list(cmds[0].execute(really_delete))
+        self.assertExists(origin)
+
+    def test_site_data_port(self):
+        """A keep list entry with a port keeps only that Chromium origin"""
+        storage = os.path.join(self.mkdtemp(), 'IndexedDB')
+        kept = os.path.join(storage, 'http_localhost_9898.indexeddb.leveldb')
+        kept_blob = os.path.join(storage, 'http_localhost_9898.indexeddb.blob')
+        gone = os.path.join(storage, 'http_localhost_4173.indexeddb.leveldb')
+        for origin in (kept, kept_blob, gone):
+            os.makedirs(origin)
+            self.write_file(os.path.join(origin, 'CURRENT'))
+        action_str = (
+            f'<action command="site.data" search="glob" path="{storage}/*"/>')
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list',
+                        return_value={'localhost:9898'}):
+            cmds = list(provider.get_commands())
+        keeps = sorted(cmd.path for cmd in cmds
+                       if isinstance(cmd, Command.Keep))
+        self.assertEqual(keeps, sorted([kept, kept_blob]))
+        self._execute_site_data(cmds)
+        self.assertNotExists(gone)
+        self.assertExists(kept)
+        self.assertExists(kept_blob)
+
+    def _execute_site_data(self, cmds):
+        """Really run the commands; a kept folder reports a skip"""
+        for cmd in cmds:
+            for result in cmd.execute(really_delete=True):
+                if isinstance(cmd, Command.Keep):
+                    self.assertEqual(result['path'], cmd.path)
+                    self.assertEqual(result['n_deleted'], 0)
+                    self.assertEqual(result['n_special'], 0)
+                else:
+                    common.validate_result(self, result, really_delete=True)
+
+    def _test_site_data(self, storage, kept, kept_container, gone):
+        """Run the site.data action with and without a keep list"""
+        action_str = (
+            '<action command="site.data" search="glob" '
+            f'path="{storage}/http*"/>')
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list',
+                        return_value={'localhost'}):
+            cmds = list(provider.get_commands())
+        keeps = [cmd for cmd in cmds if isinstance(cmd, Command.Keep)]
+        self.assertEqual(sorted(cmd.path for cmd in keeps),
+                         sorted([kept, kept_container]))
+        deletes = [cmd for cmd in cmds if isinstance(cmd, Command.Delete)]
+        self.assertEqual(deletes[-1].path, gone)
+        self.assertEqual(len(deletes), 4)
+        self._execute_site_data(cmds)
+        self.assertNotExists(gone)
+        self.assertExists(os.path.join(kept, 'ls', 'data.sqlite'))
+        self.assertExists(os.path.join(kept_container, 'ls', 'data.sqlite'))
+
+        # without a keep list everything goes
+        provider = self._action_provider(action_str)
+        with mock.patch('bleachbit.Action.load_keep_list', return_value=set()):
+            cmds = list(provider.get_commands())
+        self.assertFalse(
+            [cmd for cmd in cmds if isinstance(cmd, Command.Keep)])
+        self._execute_site_data(cmds)
+        self.assertNotExists(kept)
+        self.assertNotExists(kept_container)
 
     def test_process(self):
         """Unit test for process action"""

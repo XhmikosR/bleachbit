@@ -161,7 +161,7 @@ later.  See the COPYING file in the top-level directory.
     <action command="chrome.databases_db" search="file" path="$$profile$$/databases/Databases.db"/>
     <action command="delete" search="walk.all" path="$$profile$$/databases/http*/"/>
     <action command="delete" search="walk.all" path="$$profile$$/File System"/>
-    <action command="delete" search="walk.all" path="$$profile$$/IndexedDB"/>
+    <action command="site.data" search="glob" path="$$profile$$/IndexedDB/*"/>
     <action command="delete" search="walk.all" path="$$profile$$/Local Storage"/>
     <action command="delete" search="walk.all" path="$$profile$$/Service Worker"/>
     <action command="delete" search="walk.all" path="$$profile$$/WebStorage"/>

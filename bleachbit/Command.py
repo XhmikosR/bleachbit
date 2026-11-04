@@ -57,6 +57,22 @@ def ret_keep_list(path):
         'size': 0}
 
 
+class Keep:
+
+    """Report a path the keep list protects"""
+
+    def __init__(self, path):
+        self.path = path
+
+    def __str__(self):
+        return f'Command to keep {self.path}'
+
+    # pylint: disable-next=unused-argument
+    def execute(self, really_delete):
+        """Log the path as skipped"""
+        yield ret_keep_list(self.path)
+
+
 class Delete:
 
     """Delete a single file or directory.  Obey the user
