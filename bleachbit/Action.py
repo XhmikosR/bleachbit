@@ -577,6 +577,44 @@ class Json(FileActionProvider):
             yield Command.Json(path, self.address)
 
 
+class SiteData(FileActionProvider):
+
+    """Delete per-origin site storage, except for sites in the keep list
+
+    Use with search="glob" on the origin folders: storage/default/http*
+    in a Firefox profile, or IndexedDB/* in a Chromium profile. The
+    folder name holds the origin, so the cookie keep list protects a
+    site's LocalStorage and IndexedDB too.
+
+    It walks each folder itself instead of through search="walk.top", so
+    a change to how searches walk and delete directories applies here too.
+    """
+    action_key = 'site.data'
+
+    def get_commands(self):
+        try:
+            keep_list = load_keep_list()
+        except (OSError, ValueError) as e:
+            # Same as cookies: leave the site data alone and count an error
+            keep_path = os.path.join(bleachbit.options_dir,
+                                     CookieMod.COOKIE_KEEP_LIST_FILENAME)
+            yield Command.Fail(
+                f'Site data was not cleaned because the keep list cannot be read: {keep_path}: {e}')
+            return
+
+        for path in self.get_paths():
+            origin = CookieMod.storage_origin(path)
+            if origin and keep_list and \
+                    CookieMod.origin_in_keep_list(origin, keep_list):
+                yield Command.Keep(path)
+                continue
+            # Delete a link (or junction) itself, not what it points to
+            if os.path.isdir(path) and not os.path.islink(path):
+                for child in FileUtilities.children_in_directory(path, True):
+                    yield Command.Delete(child)
+            yield Command.Delete(path)
+
+
 class MozillaUrlHistory(FileActionProvider):
 
     """Action to clean Mozilla (Firefox) URL history in places.sqlite"""

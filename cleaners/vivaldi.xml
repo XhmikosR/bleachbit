@@ -106,7 +106,7 @@ Only the Default profile is cleaned.
     <label>Site data</label>
     <description>Delete LocalStorage, IndexedDB, and other data stored by websites</description>
     <action command="delete" search="walk.all" path="$$profile$$/File System"/>
-    <action command="delete" search="walk.all" path="$$profile$$/IndexedDB"/>
+    <action command="site.data" search="glob" path="$$profile$$/IndexedDB/*"/>
     <action command="delete" search="walk.all" path="$$profile$$/Local Storage"/>
     <action command="delete" search="walk.all" path="$$profile$$/Service Worker"/>
     <action command="delete" search="walk.all" path="$$profile$$/WebStorage"/>

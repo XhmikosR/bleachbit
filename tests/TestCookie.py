@@ -23,7 +23,7 @@ from bleachbit import Command, Cookie
 from bleachbit.Action import Cookie as CookieAction
 from bleachbit.Cookie import (
     COOKIE_KEEP_LIST_FILENAME, _checkpoint_wal, _estimate_in_memory_size,
-    load_keep_list)
+    list_unique_cookies, load_keep_list, origin_in_keep_list, storage_origin)
 from bleachbit.Options import options
 from bleachbit.FileUtilities import SQLITE_BUSY_TIMEOUT, execute_sqlite3
 from tests import common
@@ -617,6 +617,116 @@ class CookieTestCase(common.BleachbitTestCase):
         finally:
             conn.close()
         self.assertEqual(hosts, [('google.com',)])
+
+    def test_storage_origin(self):
+        """Unit test for storage_origin()"""
+        tests = (
+            # Firefox
+            ('http+++localhost+9898', 'localhost:9898'),
+            ('https+++example.com', 'example.com'),
+            ('https+++Shop.Example.com+8443', 'shop.example.com:8443'),
+            ('https+++example.com^userContextId=2', 'example.com'),
+            # third-party, isolated or private storage is never kept
+            ('https+++example.com^partitionKey=%28https%2Cother.org%29', None),
+            ('https+++example.com^userContextId=2&partitionKey=%28https%2Cother.org%29',
+             None),
+            ('https+++example.com^firstPartyDomain=other.org', None),
+            ('https+++example.com^privateBrowsingId=1', None),
+            ('https+++example.com^', 'example.com'),
+            # hosts and ports that cannot be a keep list entry
+            ('http+++[++1]+8080', None),
+            ('https+++example.com+80a', None),
+            ('https+++example..com', None),
+            ('https+++.example.com', None),
+            ('file++++home+user+index.html', None),
+            ('moz-extension+++0123-4567', None),
+            ('about+home', None),
+            ('http+++', None),
+            # Chromium IndexedDB
+            ('http_localhost_9898.indexeddb.leveldb', 'localhost:9898'),
+            ('http_localhost_9898.indexeddb.blob', 'localhost:9898'),
+            ('https_Example.com_0.indexeddb.leveldb', 'example.com'),
+            ('https_[__1]_0.indexeddb.leveldb', None),
+            ('chrome-extension_odfafepnkmbhccpbejgmiehpchacaeak_0.indexeddb.leveldb',
+             None),
+            ('devtools_devtools_0.indexeddb.leveldb', None),
+            ('LOCK', None),
+        )
+        for name, expected in tests:
+            with self.subTest(name=name):
+                path = os.path.join(self.tempdir, 'storage', name)
+                self.assertEqual(storage_origin(path), expected)
+                self.assertEqual(storage_origin(path + os.sep), expected)
+
+    def test_origin_in_keep_list_exact_host(self):
+        """Site data is kept only for the exact host, unlike cookies"""
+        tests = (
+            ('google.com', 'google.com', True),
+            ('.google.com', 'google.com', True),
+            ('Google.COM', 'google.com', True),
+            ('google.com', 'mail.google.com', False),
+            ('google.com', 'www.google.com', False),
+            ('.google.com', 'mail.google.com', False),
+            ('mail.google.com', 'mail.google.com', True),
+            ('mail.google.com', 'google.com', False),
+            ('google.com', 'notgoogle.com', False),
+            ('google.com', 'google.com.attacker.net', False),
+            ('', 'google.com', False),
+        )
+        for entry, origin, expected in tests:
+            with self.subTest(entry=entry, origin=origin):
+                self.assertEqual(
+                    origin_in_keep_list(origin, {entry}), expected)
+        self.assertFalse(origin_in_keep_list('localhost', set()))
+        self.assertTrue(origin_in_keep_list('localhost', {'LOCALHOST'}))
+
+    def test_origin_in_keep_list_port(self):
+        """A port in the keep list entry limits it to that port"""
+        tests = (
+            ('localhost:9898', 'localhost:9898', True),
+            ('localhost:9898', 'localhost:8080', False),
+            ('localhost:9898', 'localhost', False),
+            ('localhost', 'localhost:9898', True),
+            ('localhost', 'localhost', True),
+            ('example.com:8443', 'example.com:8443', True),
+            ('example.com:8443', 'shop.example.com:8443', False),
+            ('example.com:8443', 'example.com', False),
+        )
+        for entry, origin, expected in tests:
+            with self.subTest(entry=entry, origin=origin):
+                self.assertEqual(
+                    origin_in_keep_list(origin, {entry}), expected)
+
+    def test_delete_cookies_keep_entry_with_port(self):
+        """A keep list entry with a port keeps the host's cookies"""
+        path = self._create_chrome_cookies_db(
+            [('localhost', 'token'), ('example.com', 'x')])
+        result = Cookie.delete_cookies(
+            path, {'localhost:9898'}, really_delete=False)
+        self.assertEqual(result['total_kept'], 1)
+        self.assertEqual(result['total_deleted'], 1)
+
+    def test_list_unique_cookies_site_data(self):
+        """The dialog lists the hosts of per-origin storage folders"""
+        from bleachbit import Cleaner
+        from tests.TestCleaner import action_to_cleaner
+        storage = os.path.join(self.mkdtemp(), 'storage', 'default')
+        for name in ('http+++localhost+9898', 'https+++example.com',
+                     'https+++example.com^userContextId=2',
+                     'https+++tracker.org^partitionKey=%28https%2Cexample.com%29',
+                     'moz-extension+++0123'):
+            os.makedirs(os.path.join(storage, name, 'ls'))
+        # a stray file is not an origin
+        self.write_file(os.path.join(storage, 'https+++file.org'))
+        action_str = (
+            '<action command="site.data" search="glob" '
+            f'path="{storage}/http*"/>')
+        # Only this cleaner, so no other test's cleaners or real profiles count
+        backends = {'test_site_data': action_to_cleaner(action_str)}
+        with mock.patch.dict(Cleaner.backends, backends, clear=True):
+            hosts = list_unique_cookies()
+        # No stray file, extension or partitioned storage, and no duplicates
+        self.assertEqual(hosts, ['example.com', 'localhost:9898'])
 
     def test_preview_cookies_deletion_no_keeplist(self):
         """Test previewing cookie deletion with no keep list"""

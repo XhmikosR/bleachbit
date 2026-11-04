@@ -66,7 +66,7 @@ class CookieManagerPane(Gtk.Box):
         instructions = Gtk.Label()
         instructions.set_markup(
             # TRANSLATORS: Instruction label in the manage cookies dialog.
-            "<b>" + _("Select the cookies to keep when cleaning cookies across browsers.") + "</b>")
+            "<b>" + _("Select the sites whose cookies and site data to keep when cleaning browsers.") + "</b>")
         instructions.set_line_wrap(True)
         instructions.set_xalign(0)
         self.pack_start(instructions, False, False, 0)
@@ -75,12 +75,17 @@ class CookieManagerPane(Gtk.Box):
         notice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         notice_label = Gtk.Label()
         notice_label.set_markup(
-            # TRANSLATORS: This is a notice in the cookie manager about supported
-            # cookie types. The hyperlink points to the documentation website.
-            # Cookies refer to standard HTTP cookies.
-            # Site data includes LocalStorage, IndexedDB, and other website storage.
-            _("Only cookies are preserved. Site data is always deleted. "
-              "<a href='{url}'>Learn more</a>").format(
+            # TRANSLATORS: This is a notice in the cookie manager. The hyperlink
+            # points to the documentation website. LocalStorage and IndexedDB
+            # are proper nouns. Firefox keeps all site data in one folder per
+            # site. Chromium-based browsers keep IndexedDB per site but mix
+            # every site's LocalStorage in one database, which is deleted whole.
+            # Site data is kept only for the exact hosts selected, unlike
+            # cookies, which a parent domain also keeps.
+            _("A kept site also keeps its LocalStorage and IndexedDB in "
+              "Firefox-based browsers, and its IndexedDB in Chromium-based "
+              "browsers. A subdomain's site data is kept only when the "
+              "subdomain is selected too. <a href='{url}'>Learn more</a>").format(
                 url=URL_COOKIE_MGR))
         notice_label.set_line_wrap(True)
         notice_label.set_xalign(0)
