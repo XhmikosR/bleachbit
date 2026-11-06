@@ -10,6 +10,7 @@ on:
     paths-ignore: &paths-ignore
       - '.gitignore'
       - '.gitattributes'
+      - '.github/workflows/rpm.yml'
       - 'bleachbit.png'
       - 'bleachbit.svg'
       - 'bleachbit.spec'
@@ -24,6 +25,7 @@ on:
       - 'po/*.po' # translation strings
       - 'po/*.pot' # translation template
       - 'README.md'
+      - 'scripts/ci-rpm-build.sh'
       - 'windows/NsisInclude/NsisMultiUserLang.nsh' # translation strings only
   pull_request:
     branches:
