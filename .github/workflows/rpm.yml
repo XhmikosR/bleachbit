@@ -1,0 +1,85 @@
+name: RPM build
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!dependabot/**' # avoid duplicate runs; the pull_request event handles dependabot PRs
+    paths: &paths
+      - '**'
+      - '!.github/**'
+      - '.github/actions/**'
+      - '.github/workflows/rpm.yml'
+      - '!**.md'
+      - 'README.md' # packaged as %doc
+      - '!debian/**'
+      - '!doc/**'
+      - '!docker/**'
+      - '!po/*.po' # translation strings
+      - '!po/*.pot' # translation template
+      - '!scripts/**'
+      - 'scripts/ci-rpm-build.sh'
+      - '!windows/**'
+  pull_request:
+    branches:
+      - '**'
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_name != 'master' && github.ref_type != 'tag' }}
+
+# OBS builds the published packages, this only checks the spec builds
+jobs:
+  rpm:
+    name: rpm (${{ matrix.distro }} ${{ matrix.version }})
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: fedora
+            version: '44'
+            image: fedora:44
+          - distro: fedora
+            version: '45'
+            image: fedora:45
+          - distro: opensuse
+            version: tumbleweed
+            image: opensuse/tumbleweed
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The spec's %install runs make check-revision
+      - name: Generate Revision.py
+        id: revision
+        uses: $/.github/actions/generate-revision
+
+      - name: Build RPM and SRPM
+        env:
+          DISTRO: ${{ matrix.distro }}
+          IMAGE: ${{ matrix.image }}
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/src" -w /src "$IMAGE" ./scripts/ci-rpm-build.sh "$DISTRO"
+
+      - name: Show package sizes and hashes
+        working-directory: rpms
+        run: |
+          ls -l -- *.rpm
+          sha256sum -- *.rpm
+
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.distro }}-${{ matrix.version }}-rpm-${{ steps.revision.outputs.revision }}
+          if-no-files-found: error
+          # RPMs are already compressed
+          compression-level: 0
+          path: rpms/*.rpm
