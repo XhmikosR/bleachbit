@@ -34,6 +34,13 @@ later.  See the COPYING file in the top-level directory.
     <value search="glob" os="linux">~/.var/app/app.zen_browser.zen/.zen/*</value>
     <value search="glob" os="freebsd">~/.zen/*</value>
     <value search="glob" os="openbsd">~/.zen/*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\Zen</value>
+    <value search="mozilla.profiles" os="macos">~/Library/Application Support/zen</value>
+    <value search="mozilla.profiles" os="linux">~/.zen</value>
+    <value search="mozilla.profiles" os="linux">~/snap/zen/common/.zen</value>
+    <value search="mozilla.profiles" os="linux">~/.var/app/app.zen_browser.zen/.zen</value>
+    <value search="mozilla.profiles" os="freebsd">~/.zen</value>
+    <value search="mozilla.profiles" os="openbsd">~/.zen</value>
   </var>
   <option id="backup">
     <label>Backup files</label>

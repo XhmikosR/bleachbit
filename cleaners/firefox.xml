@@ -34,6 +34,12 @@ later.  See the COPYING file in the top-level directory.
     <value search="glob" os="unix">~/.config/mozilla/firefox/*</value>
     <value search="glob" os="linux">~/snap/firefox/common/.mozilla/firefox/*</value>
     <value search="glob" os="linux">~/.var/app/org.mozilla.firefox/.mozilla/firefox/*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\Mozilla\Firefox</value>
+    <value search="mozilla.profiles" os="macos">~/Library/Application Support/Firefox</value>
+    <value search="mozilla.profiles" os="unix">~/.mozilla/firefox</value>
+    <value search="mozilla.profiles" os="unix">~/.config/mozilla/firefox</value>
+    <value search="mozilla.profiles" os="linux">~/snap/firefox/common/.mozilla/firefox</value>
+    <value search="mozilla.profiles" os="linux">~/.var/app/org.mozilla.firefox/.mozilla/firefox</value>
   </var>
   <option id="backup">
     <label>Backup files</label>

@@ -36,6 +36,13 @@ later.  See the COPYING file in the top-level directory.
     <value search="glob" os="linux">~/snap/thunderbird/[0-9]*/.config/thunderbird/*</value>
     <value search="glob" os="linux">~/.var/app/org.mozilla.Thunderbird/.thunderbird/*</value>
     <value search="glob" os="windows">%AppData%\Thunderbird\Profiles\*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\Thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/.thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/.config/thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/.config/mozilla/thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/snap/thunderbird/[0-9]*/.config/thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/snap/thunderbird/[0-9]*/.config/mozilla/thunderbird</value>
+    <value search="mozilla.profiles" os="linux">~/.var/app/org.mozilla.Thunderbird/.thunderbird</value>
   </var>
   <option id="cache">
     <label>Cache</label>

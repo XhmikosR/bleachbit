@@ -31,6 +31,10 @@ LibreWolf 150.0.1-1 installed by .deb from its official repository uses
     <value search="glob" os="unix">~/.librewolf/*</value>
     <value search="glob" os="unix">~/.config/librewolf/librewolf/*</value>
     <value search="glob" os="linux">~/.var/app/io.gitlab.librewolf-community/.librewolf/*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\librewolf</value>
+    <value search="mozilla.profiles" os="unix">~/.librewolf</value>
+    <value search="mozilla.profiles" os="unix">~/.config/librewolf/librewolf</value>
+    <value search="mozilla.profiles" os="linux">~/.var/app/io.gitlab.librewolf-community/.librewolf</value>
   </var>
   <option id="backup">
     <label>Backup files</label>

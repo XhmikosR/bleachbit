@@ -778,3 +778,73 @@ class CleanerMLTestCase(common.BleachbitTestCase):
             for result in cmd.execute(False):
                 self.assertEqual(0, result['n_deleted'])
         self.assertExists(test_log_path)
+
+    def test_var_mozilla_profiles(self):
+        """mozilla.profiles adds only new, valid profiles from profiles.ini"""
+        basedir = self.mkdtemp(prefix='bleachbit-cleanerml-mozilla')
+        base = os.path.join(basedir, 'base')
+        rel_profile = os.path.join(base, 'abc.default')
+        abs_profile = os.path.join(basedir, 'custom')
+        no_prefs = os.path.join(basedir, 'noprefs')
+        for path in (rel_profile, abs_profile):
+            common.touch_file(os.path.join(path, 'prefs.js'))
+        os.mkdir(no_prefs)
+        shared = os.path.join(basedir, 'shared')
+        common.touch_file(os.path.join(shared, 'prefs.js'))
+        if os.name == 'posix':
+            os.chmod(shared, 0o1777)
+        ini = ('[Profile0]\nIsRelative=1\nPath=abc.default\n'
+               f'[Profile1]\nIsRelative=0\nPath={abs_profile}\n'
+               f'[Profile2]\nIsRelative=0\nPath={no_prefs}\n'
+               f'[Profile3]\nIsRelative=0\nPath={basedir}\n'
+               f'[Profile4]\nPath={abs_profile}\n'
+               f'[Install0]\nDefault={no_prefs}\n')
+        if os.name == 'posix':
+            ini += f'[Profile5]\nIsRelative=0\nPath={shared}\n'
+        self.write_file(os.path.join(base, 'profiles.ini'), ini.encode())
+        xml_str = f"""
+<cleaner id="testvarmozilla">
+    <label>cleaner label</label>
+    <var name="profile">
+        <value search="glob">{base}/*</value>
+        <value search="mozilla.profiles">{base}</value>
+    </var>
+    <option id="option1">
+        <label>option1 label</label>
+        <description>option1 description</description>
+        <action search="file" command="delete" path="$$profile$$/test.log" />
+    </option>
+</cleaner>
+"""
+        cml_path = os.path.join(self.mkdtemp(), 'test_var_mozilla.xml')
+        self.write_file(cml_path, xml_str.encode())
+        xmlc = CleanerML(cml_path)
+        self.assertEqual([abs_profile, rel_profile], xmlc.vars['profile'])
+
+        # Without profiles.ini the variable is the glob alone
+        os.remove(os.path.join(base, 'profiles.ini'))
+        self.assertEqual([rel_profile], CleanerML(cml_path).vars['profile'])
+
+    def test_mozilla_profiles_sandbox(self):
+        """A sandboxed app's profiles.ini stays inside the app's directory"""
+        from bleachbit.CleanerML import mozilla_profile_dirs
+        home = self.mkdtemp(prefix='bleachbit-cleanerml-sandbox')
+        app = os.path.join(home, '.var', 'app', 'org.mozilla.firefox')
+        base = os.path.join(app, '.mozilla', 'firefox')
+        inside = os.path.join(app, 'data', 'prof')
+        outside = os.path.join(home, '.mozilla', 'firefox', 'x.default')
+        # The app sees its persisted ~/.mozilla at the home path
+        persisted = os.path.join(base, 'custom')
+        for path in (inside, outside, persisted):
+            common.touch_file(os.path.join(path, 'prefs.js'))
+        ini_path = os.path.join(base, 'profiles.ini')
+        self.write_file(ini_path, (
+            f'[Profile0]\nIsRelative=0\nPath={outside}\n'
+            '[Profile1]\nIsRelative=1\nPath=../../data/prof\n'
+            '[Profile2]\nIsRelative=1\nPath=../../../../.mozilla/firefox/x.default\n'
+            f'[Profile3]\nIsRelative=0\nPath={home}/.mozilla/firefox/custom\n'
+        ).encode())
+        with common.set_temporary_env('HOME', home), \
+                common.set_temporary_env('USERPROFILE', home):
+            self.assertEqual(
+                [inside, persisted], mozilla_profile_dirs(ini_path))

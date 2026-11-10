@@ -27,6 +27,10 @@ later.  See the COPYING file in the top-level directory.
     <value search="glob" os="macos">~/Library/Application Support/Waterfox/Profiles/*</value>
     <value search="glob" os="unix">~/.waterfox/*</value>
     <value search="glob" os="linux">~/.var/app/net.waterfox.waterfox/.waterfox/*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\Waterfox</value>
+    <value search="mozilla.profiles" os="macos">~/Library/Application Support/Waterfox</value>
+    <value search="mozilla.profiles" os="unix">~/.waterfox</value>
+    <value search="mozilla.profiles" os="linux">~/.var/app/net.waterfox.waterfox/.waterfox</value>
   </var>
   <option id="backup">
     <label>Backup files</label>
