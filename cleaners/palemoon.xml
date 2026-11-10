@@ -25,6 +25,10 @@ later.  See the COPYING file in the top-level directory.
     <value search="glob" os="linux">~/.moonchild productions/pale moon/*</value>
     <value search="glob" os="freebsd">~/.moonchild productions/pale moon/*</value>
     <value search="glob" os="openbsd">~/.moonchild productions/pale moon/*</value>
+    <value search="mozilla.profiles" os="windows">%AppData%\moonchild productions\pale moon</value>
+    <value search="mozilla.profiles" os="linux">~/.moonchild productions/pale moon</value>
+    <value search="mozilla.profiles" os="freebsd">~/.moonchild productions/pale moon</value>
+    <value search="mozilla.profiles" os="openbsd">~/.moonchild productions/pale moon</value>
   </var>
   <option id="backup">
     <label>Backup files</label>

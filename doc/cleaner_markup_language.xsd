@@ -75,6 +75,7 @@ later.  See the COPYING file in the top-level directory.
                         <xs:simpleType>
                           <xs:restriction base="xs:string">
                             <xs:enumeration value="glob"/>
+                            <xs:enumeration value="mozilla.profiles"/>
                             <xs:enumeration value="winreg"/>
                           </xs:restriction>
                         </xs:simpleType>

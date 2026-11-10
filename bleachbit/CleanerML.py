@@ -10,8 +10,10 @@ Create cleaners from CleanerML (markup language)
 """
 
 # standard library
+import configparser
 import logging
 import os
+import stat
 import sys
 import time
 import xml.etree.ElementTree
@@ -40,6 +42,12 @@ _YIELD_SECONDS = 0.05
 Deletion stays allowed, so blocking registry deletion too would buy nothing.
 """
 UNTRUSTED_BLOCKED_COMMANDS = ('process', 'process.terminate')
+
+# A real profiles.ini is a few KiB
+_PROFILES_INI_MAX_BYTES = 1024 * 1024
+
+# Per-app directories that Flatpak, snap and the macOS App Sandbox give an app
+_SANDBOX_HOMES = (('.var', 'app'), ('snap',), ('Library', 'Containers'))
 
 
 class _ETSimpleTextNode:
@@ -130,6 +138,112 @@ def _parse_cleaner_xml(pathname):
         data = f.read()
     reject_xml_dtd(data, 'CleanerML')
     return xml.etree.ElementTree.fromstring(data)
+
+
+def _is_mozilla_profile_dir(path):
+    """Return True if path is a profile directory this process may clean.
+
+    Rejects symlinks, junctions, world-writable or sticky directories,
+    directories owned by another user and directories without prefs.js,
+    so a bad Path= cannot widen the cleaning.
+    """
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(st.st_mode):
+        return False
+    if getattr(st, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+        return False
+    if IS_POSIX and (st.st_uid != os.geteuid()
+                     or st.st_mode & (stat.S_IWOTH | stat.S_ISVTX)):
+        return False
+    try:
+        return stat.S_ISREG(os.lstat(os.path.join(path, 'prefs.js')).st_mode)
+    except OSError:
+        return False
+
+
+def _sandbox_app_dir(path):
+    """Return the sandboxed app's own directory above path, or None"""
+    home = os.path.expanduser('~')
+    for parts in _SANDBOX_HOMES:
+        base = os.path.join(home, *parts)
+        if not path_startswith(path, base):
+            continue
+        rel = os.path.relpath(path, base)
+        app = rel.split(os.sep, 1)[0]
+        if app in (os.curdir, os.pardir) or rel == app:
+            continue
+        return os.path.join(base, app)
+    return None
+
+
+def _flatpak_persisted_dir(ini_path, app_dir):
+    """Return the persisted home dir (such as .mozilla) holding a Flatpak
+    app's profiles.ini, or None"""
+    if app_dir is None or not path_startswith(
+            app_dir, os.path.join(os.path.expanduser('~'), '.var', 'app')):
+        return None
+    first = os.path.relpath(ini_path, app_dir).split(os.sep, 1)[0]
+    if first.startswith('.') and first not in (os.curdir, os.pardir):
+        return first
+    return None
+
+
+def _map_flatpak_persisted(path, app_dir, persisted):
+    """Map a path the Flatpak app sees under ~/<persisted> to the host"""
+    home = os.path.expanduser('~')
+    in_home = os.path.join(home, persisted)
+    if path == in_home or path_startswith(path, in_home):
+        return os.path.join(app_dir, os.path.relpath(path, home))
+    return path
+
+
+def mozilla_profile_dirs(ini_path):
+    """Return the profile directories listed in a Mozilla profiles.ini"""
+    try:
+        with open(ini_path, 'rb') as f:
+            data = f.read(_PROFILES_INI_MAX_BYTES)
+    except OSError as e:
+        logger.debug("cannot read %s: %s", ini_path, e)
+        return []
+    parser = configparser.ConfigParser(
+        delimiters=('=',), interpolation=None, strict=False)
+    try:
+        parser.read_string(data.decode('utf-8-sig', errors='replace'))
+    except configparser.Error as e:
+        logger.warning("cannot parse %s: %s", ini_path, e)
+        return []
+    base_dir = os.path.dirname(ini_path)
+    # A sandboxed app's profiles.ini must not send the cleaning outside it
+    app_dir = _sandbox_app_dir(ini_path)
+    persisted = _flatpak_persisted_dir(ini_path, app_dir)
+    real_app_dir = os.path.realpath(app_dir) if app_dir else None
+    ret = []
+    for section in parser.sections():
+        if not section.startswith('Profile'):
+            continue
+        path = parser.get(section, 'Path', fallback='')
+        is_relative = parser.get(section, 'IsRelative', fallback='')
+        if not path:
+            continue
+        if is_relative == '1':
+            path = os.path.join(base_dir, path)
+        elif is_relative != '0' or not os.path.isabs(path):
+            continue
+        path = os.path.normpath(path)
+        if is_relative == '0' and persisted is not None:
+            path = _map_flatpak_persisted(path, app_dir, persisted)
+        if real_app_dir is not None and not path_startswith(
+                os.path.realpath(path), real_app_dir):
+            logger.debug("skipping profile %s outside %s", path, app_dir)
+            continue
+        if _is_mozilla_profile_dir(path):
+            ret.append(path)
+        else:
+            logger.debug("skipping profile %s from %s", path, ini_path)
+    return ret
 
 
 class CleanerML:
@@ -357,7 +471,11 @@ class CleanerML:
          <value>~/.config/foo</value>
          <value>%AppData\foo</value>
          <value search="winreg" path="HKCU\Software\Valve\Steam" name="SteamPath"></value>
+         <value search="mozilla.profiles">~/.mozilla/firefox</value>
          </var>
+
+        mozilla.profiles reads profiles.ini in the given directories (a glob)
+        and adds the profiles the earlier values did not already cover.
         """
         var_name = var.attrib.get('name', '')
         for value_element in var.findall('value'):
@@ -378,6 +496,8 @@ class CleanerML:
                 if value_list is None:
                     continue
                 value_list = [value_list, ]
+            elif search_type == 'mozilla.profiles':
+                value_list = self._new_mozilla_profiles(var_name, value_str)
             else:
                 value_list = [value_str, ]
             if var_name in self.vars:
@@ -386,6 +506,21 @@ class CleanerML:
             else:
                 # initialize
                 self.vars[var_name] = value_list
+
+    def _new_mozilla_profiles(self, var_name, base_glob):
+        """Return profiles from profiles.ini not already in the variable"""
+        known = None
+        ret = []
+        for ini_path in expand_glob_join(base_glob, 'profiles.ini'):
+            for path in mozilla_profile_dirs(ini_path):
+                if known is None:
+                    known = {os.path.normcase(os.path.realpath(known_path))
+                             for known_path in self.vars.get(var_name, ())}
+                key = os.path.normcase(os.path.realpath(path))
+                if key not in known:
+                    known.add(key)
+                    ret.append(path)
+        return ret
 
 
 def reject_world_writable(pathname):
