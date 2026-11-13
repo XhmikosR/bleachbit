@@ -53,3 +53,6 @@ runuser -u builder -- env HOME=/home/builder \
 
 mkdir -p rpms
 cp "$topdir"/RPMS/*/*.rpm "$topdir"/SRPMS/*.rpm rpms/
+
+# Show the directory modes the package installs
+rpm -qlvp rpms/*.noarch.rpm | grep '^d'
